@@ -808,6 +808,15 @@
     </div>
     <div class="modal-body">
       <div class="history-item">
+        <div class="history-tag">v6.2.6 by Claude - 資料庫限制 email 只能寫自己的</div>
+        <div class="history-desc">
+          <ul>
+            <li><b>防冒名與惡意內容：</b>Supabase 寫入規則加上檢查，學員的進度與上線紀錄中 `email` 必須等於自己登入的 email，否則資料庫拒絕寫入 (原本可繞過網頁直接呼叫 API 填入他人 email 或惡意 HTML)。</li>
+            <li>正常做題、同步與管理者修改啟動日期皆不受影響；SQL 紀錄保存於 `tools/supabase_policies_v6.2.6.sql`。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="history-item">
         <div class="history-tag">v6.2.5 by Claude - 程式碼審查修正 (安全性與資料保護)</div>
         <div class="history-desc">
           <ul>
