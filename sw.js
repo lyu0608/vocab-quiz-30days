@@ -11,6 +11,8 @@ const CORE = [
   "./2000words.html",
   "./vocab.html",
   "./vocab2000.js",
+  "./cap_exam_bank.js", // v6.2.8 by Claude：官方真題題庫
+  "./cap_listening_bank.js", // v6.2.9 by Claude：官方聽力題庫 (音檔本身不預存，見下方 fetch)
   "./manifest.json",
   "./manifest.webmanifest",
   "./icon.svg",
@@ -55,6 +57,9 @@ self.addEventListener("fetch", e => {
   const sameOrigin = url.origin === self.location.origin;
   const isSupabaseLib = url.href.startsWith("https://cdn.jsdelivr.net/npm/@supabase/");
   if (!sameOrigin && !isSupabaseLib) return;   // Supabase 資料庫、Google 圖示等一律走網路
+  // v6.2.9 by Claude：聽力官方錄音 (listen/*.mp3) 直接走網路不快取：瀏覽器以分段 (Range) 方式讀取音檔，
+  // 分段回應無法存入快取，且 69 個音檔共約 22MB，不適合佔用手機空間
+  if (url.pathname.includes("/listen/")) return;
 
   // 網頁本身：先抓網路上的新版，沒網路才用快取
   if (req.mode === "navigate") {

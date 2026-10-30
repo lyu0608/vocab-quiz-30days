@@ -103,6 +103,9 @@ only1200 = [v for k, v in b1200.items() if k not in entries]
 FIX_1200 = {  # page-break / multi-line / run-on defs
     "bar": ("條；棒；酒吧", "名詞"), "Mid-Autumn": ("中秋（節）", "名詞"),
     "unit": ("單位；單元", "名詞"), "cell": ("細胞；單元；小房間", "名詞"), "better": ("較好的；更好的", "形容詞"),
+    # v6.2.8 by Claude：題目檢查發現以下解釋含英文碎片 (原 PDF 的括號說明被拆開)
+    "being": ("存在；生物", "名詞"), "children": ("孩子們 (child 的複數)", "名詞"),
+    "MTV": ("音樂電視", "名詞"), "CD": ("光碟", "名詞"),
 }
 for en, d in only1200:
     zh, pos = FIX_1200.get(en) or short_1200(d)

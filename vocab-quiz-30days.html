@@ -15,6 +15,10 @@
   <!-- 引用外部 Supabase 函式庫與本機 2277 競賽字庫 -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="vocab2000.js"></script>
+  <!-- v6.2.8 by Claude：國中教育會考官方真題 (英語閱讀單題，含官方答案)，由 tools/build_cap_bank.py 產生 -->
+  <script src="cap_exam_bank.js"></script>
+  <!-- v6.2.9 by Claude：國中教育會考官方聽力真題 (官方錄音位於 listen/ 資料夾)，由 tools/build_cap_listening.py 產生 -->
+  <script src="cap_listening_bank.js"></script>
 
   <style>
     :root {
@@ -734,10 +738,12 @@
       <div class="word-title" id="wordDisplay">載入中...</div>
 
       <div id="audioPlayerBox" class="audio-player-box hidden">
+        <!-- v6.2.9 by Claude：改為播放國中教育會考官方錄音 (原為電腦語音朗讀自編題) -->
         <button class="listen-btn-main" id="playAudioBtn" onclick="playCurrentListeningAudio()">
-          ▶️ 播放聽力考題 (美式標準音)
+          ▶️ 播放官方錄音
         </button>
-        <span id="audioStatusText" style="font-size: 11px; color: var(--muted);">原生發音引擎，點擊即可完整播放</span>
+        <span id="audioStatusText" style="font-size: 11px; color: var(--muted);">會考原音，每題內容播放兩次</span>
+        <audio id="listenAudio" preload="none"></audio>
       </div>
 
       <div class="cloze-translation-hint hidden" id="clozeZhHint"></div>
@@ -807,6 +813,27 @@
       <button class="modal-close" onclick="toggleChangelogModal(false)">&times;</button>
     </div>
     <div class="modal-body">
+      <div class="history-item">
+        <div class="history-tag">v6.2.9 by Claude - 聽力改用官方會考原題與官方錄音</div>
+        <div class="history-desc">
+          <ul>
+            <li><b>聽力官方原題：</b>改用 110–113 年國中教育會考英語聽力官方原題 69 題 (基本問答、言談理解)，播放官方錄音，選項 (官方 A–C 順序) 與答案取自官方聽力試題本與參考答案，並標示年度與題號；看圖作答的題目因無法顯示圖片而未收錄。原本 2 題自編聽力題已移除。</li>
+            <li><b>答案檢查：</b>69 題的官方答案皆已與官方錄音內容逐題比對確認。</li>
+            <li>官方錄音壓縮為 48kbps 單聲道 (共約 22MB)，按下播放才下載該題錄音；聽力錄音不提供離線播放。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="history-item">
+        <div class="history-tag">v6.2.8 by Claude - 真題改用官方會考原題、全題型答案檢查</div>
+        <div class="history-desc">
+          <ul>
+            <li><b>真題改用官方原題：</b>經與國中教育會考官方試題本比對，原「真題」並非會考原題 (標示的年度題號在官方試卷中找不到，其餘單字的出處標籤為程式自動產生)。現改為 108–113 年英語科閱讀「單題」官方原題 102 題，題幹、選項 (官方 A–D 順序) 與答案皆取自官方試題本與參考答案，並標示正確年度與題號；需看圖作答的題目因無法顯示圖片而未收錄。</li>
+            <li><b>聽力：</b>原標示為會考原題的 2 題無法對照官方資料，改標示為「自編，非會考原題」；修正聽力錯題記錄到錯誤題目的問題。</li>
+            <li><b>單字／單字(難)／填空：</b>干擾選項改為排除與正解「任一意思重疊」的字 (題庫有 263 組字共用意思，例如 add / increase 都是「增加」)，避免一題有兩個正確答案；修正 4 個解釋含英文碎片的單字 (being、children、MTV、CD)。</li>
+            <li>真題模式的發音按鈕在作答前不再唸出答案。</li>
+          </ul>
+        </div>
+      </div>
       <div class="history-item">
         <div class="history-tag">v6.2.7 by Claude - 修正作答進度無法存到雲端</div>
         <div class="history-desc">
@@ -973,34 +1000,16 @@
 </div>
 
 <script>
-const CAP_EXAM_BANK = {
-  "abroad": { year: "112年國中教育會考", section: "英語科閱讀單選 第1題", sentence: "Mr. Lin has lived ______ for many years, so he can speak English very well.", zh: "林先生在國外住了許多年，所以他英文說得非常好。", distractors: ["ahead", "almost", "alone"] },
-  "accident": { year: "111年國中教育會考", section: "英語科閱讀單選 第2題", sentence: "Be careful when you cross the street. There was a terrible car ______ here yesterday.", zh: "過馬路時要小心。昨天這裡發生了一場嚴重的車禍意外。", distractors: ["action", "activity", "advice"] },
-  "convenient": { year: "113年國中教育會考", section: "英語科閱讀單選 第3題", sentence: "Living near the MRT station is very ______. It takes me only five minutes to get to school.", zh: "住在捷運站附近非常便利。我只需要花五分鐘就能到學校。", distractors: ["comfortable", "dangerous", "expensive"] },
-  "borrow": { year: "110年國中教育會考", section: "英語科閱讀單選 第1題", sentence: "I forgot to bring my pen today. Could I please ______ one from you?", zh: "I forgot to bring my pen today. Could I please borrow one from you?", distractors: ["lend", "buy", "sell"] },
-  "collect": { year: "109年國中教育會考", section: "英語科閱讀單選 第2題", sentence: "My brother likes to ______ stamps from all over the world.", zh: "我的哥哥喜歡收集來自世界各地的郵票。", distractors: ["correct", "connect", "control"] },
-  "famous": { year: "112年國中教育會考", section: "英語科閱讀單選 第4題", sentence: "Tainan is ______ for its delicious traditional street food.", zh: "台南以其道地美味的傳統街頭小吃聞名。", distractors: ["foreign", "fresh", "friendly"] },
-  "weather": { year: "108年國中教育會考", section: "英語科閱讀單選 第1題", sentence: "The ______ in Taipei is often rainy and humid in winter.", zh: "台北冬天的氣候經常多雨且潮濕。", distractors: ["season", "holiday", "nature"] },
-  "healthy": { year: "110年國中教育會考補考", section: "英語科閱讀單選 第2題", sentence: "Eating fresh fruit and exercising every day helps you stay ______.", zh: "每天吃新鮮水果並保持規律運動能讓你維持健康。", distractors: ["hungry", "heavy", "helpful"] },
-  "traffic": { year: "113年國中教育會考", section: "英語科閱讀單選 第2題", sentence: "The morning ______ is always heavy, so you should leave home earlier.", zh: "早晨的交通總是非常擁擠，所以你應該提早出門。", distractors: ["trouble", "travel", "ticket"] },
-  "environment": { year: "111年國中教育會考", section: "英語科閱讀單選 第5題", sentence: "We should use less plastic to protect our natural ______.", zh: "We should use less plastic to protect our natural environment.", distractors: ["experience", "equipment", "energy"] }
-};
+// v6.2.8 by Claude：移除原 CAP_EXAM_BANK。原本 10 題標示為 108–113 年會考「真題」，經與國中教育會考官方
+// 試題本比對，110–113 年所標示的 8 題在官方試卷中都找不到 (例如官方 113 年第 2 題實為 "My ______ hurts…")，
+// 其餘 2 題 (108、109) 寫法相同，判定為自編題。真題改由 cap_exam_bank.js 提供官方原題與官方答案
 
-const CAP_LISTENING_BANK = [
-  { year: "112年國中教育會考 聽力測驗", section: "基本問答 第5題", scriptEn: "Would you like some more delicious apple pie?", scriptZh: "你想要再來點美味的蘋果派嗎？", options: [{ en: "Yes, please. It tastes wonderful.", zh: "好的，請給我一些。嚐起來太美味了。" }, { en: "I bought it at the bakery yesterday.", zh: "我昨天是在麵包店買的。" }, { en: "Apple pie is my mother's favorite dessert.", zh: "蘋果派是我媽媽最喜歡的甜點。" }], answerEn: "Yes, please. It tastes wonderful.", explanation: "【考點：日常應答與點心款待】" },
-  { year: "111年國中教育會考 聽力測驗", section: "辨識句意 第1題", scriptEn: "The boy is riding his bicycle along the river bank.", scriptZh: "那個男孩正沿著河岸騎腳踏車。", options: [{ en: "The boy is riding his bicycle along the river bank.", zh: "那個男孩正沿著河岸騎腳踏車。" }, { en: "The boy is running fast in the school gym.", zh: "那個男孩正在學校體育館裡飛快奔跑。" }, { en: "The boy is swimming across the lake with his friends.", zh: "那個男孩正和朋友們游泳橫渡湖泊。" }], answerEn: "The boy is riding his bicycle along the river bank.", explanation: "【考點：動作進行式與地點辨識】" }
-];
+// v6.2.9 by Claude：移除 2 題自編聽力題 (CAP_LISTENING_BANK)。聽力改用 cap_listening_bank.js：
+// 110–113 年國中教育會考英語聽力官方原題 (官方錄音、題本選項與官方答案)，見 buildListenItems
 
-const CAP_YEAR_MAPPING = {
-  getSource: function(word, level) {
-    const clean = word.trim().toLowerCase();
-    if (CAP_EXAM_BANK[clean]) return `🏛️ 【${CAP_EXAM_BANK[clean].year}】 ${CAP_EXAM_BANK[clean].section}`;
-    const years = ["113年國中教育會考 閱讀單選", "112年國中教育會考 閱讀單選", "111年國中教育會考 閱讀單選"];
-    let hash = 0;
-    for (let i = 0; i < clean.length; i++) hash = (hash * 31 + clean.charCodeAt(i)) >>> 0;
-    return `🏛️ 【${years[hash % years.length]} 第${(hash % 15) + 1}題】`;
-  }
-};
+// v6.2.8 by Claude：移除編造的「真題出處」。原本對題庫中沒有收錄的單字，用雜湊亂算出
+// 「113年國中教育會考 閱讀單選 第N題」之類的標籤，全部都不是真正的會考出處。
+// 真題模式改用 cap_exam_bank.js 中由官方試題本與參考答案產生的題目 (見 getExamPlan)
 
 const SUPABASE_URL = "https://qdheftossctylaycszfd.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_Ylg58I3mARi-3ce9hWaZkw_AcWz_deg";
@@ -1188,8 +1197,8 @@ function mergeCloudIntoStore(local, cloudRow) {
   QUIZ_TYPES.forEach(t => {
     merged.historyByQuiz[t] = { ...(cHist[t] || {}), ...(merged.historyByQuiz[t] || {}) };
     const list = (merged.mistakesByQuiz[t] || []).slice();
-    const ids = new Set(list.map(m => m.en || m.scriptEn));
-    (cMist[t] || []).forEach(m => { const id = m.en || m.scriptEn; if (!ids.has(id)) { ids.add(id); list.push(m); } });
+    const ids = new Set(list.map(itemId)); // v6.2.8 by Claude：改用 itemId (真題以年度-題號識別)
+    (cMist[t] || []).forEach(m => { const id = itemId(m); if (!ids.has(id)) { ids.add(id); list.push(m); } });
     merged.mistakesByQuiz[t] = list;
   });
   const cStats = cloudRow.stats || {};
@@ -1771,6 +1780,9 @@ function getBestUSVoice() {
 function stopAllAudio() {
   if (window.speechSynthesis) window.speechSynthesis.cancel();
   if (speechKeepAliveTimer) { clearInterval(speechKeepAliveTimer); speechKeepAliveTimer = null; }
+  // v6.2.9 by Claude：一併停止官方聽力錄音
+  const a = document.getElementById("listenAudio");
+  if (a && !a.paused) a.pause();
 }
 
 function speakPureUS(text, cb) {
@@ -1789,13 +1801,28 @@ function speakPureUS(text, cb) {
   window.speechSynthesis.speak(utt);
 }
 
+// v6.2.9 by Claude：目前的聽力題 (佇列中的官方聽力真題)
+function currentListeningItem() {
+  const cur = currentTestQueue[currentIndex];
+  return cur && cur.isCapListen ? cur : null;
+}
+
+// v6.2.9 by Claude：播放該題的官方錄音 (取代原本的電腦語音朗讀)；音檔在第一次播放時才下載
 function playCurrentListeningAudio() {
   if (currentQuizType !== "listen") return;
-  const lData = CAP_LISTENING_BANK[currentIndex % CAP_LISTENING_BANK.length];
-  document.getElementById("audioStatusText").innerText = "🔊 正在以標準美式發音朗讀考題...";
+  const item = currentListeningItem();
+  if (!item) return;
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  const audio = document.getElementById("listenAudio");
+  const status = document.getElementById("audioStatusText");
   const btn = document.getElementById("playAudioBtn");
+  if (!audio.src.endsWith(item.audio)) audio.src = item.audio;
+  audio.currentTime = 0;
   btn.disabled = true;
-  speakPureUS(lData.scriptEn, () => { btn.disabled = false; document.getElementById("audioStatusText").innerText = "✅ 考題朗讀完畢"; });
+  status.innerText = "🔊 播放官方錄音中 (每題內容播放兩次)...";
+  audio.onended = () => { btn.disabled = false; status.innerText = "✅ 播放完畢，可再按一次重聽"; };
+  audio.onerror = () => { btn.disabled = false; status.innerText = "⚠️ 錄音載入失敗，請確認網路連線後再試"; };
+  audio.play().catch(() => { btn.disabled = false; status.innerText = "⚠️ 無法播放錄音，請再按一次"; });
 }
 
 function setQuizType(type) {
@@ -1815,7 +1842,8 @@ function setQuizType(type) {
   refreshHistoryDisplay();
 
   if (!isRandomMode) changeDay(currentDay);
-  else { currentTestQueue = shuffle(currentTestQueue); currentIndex = 0; correctCount = 0; wrongCount = 0; renderQuestion(); }
+  // v6.2.8 by Claude：亂數模式切換題型時重新出題；真題與單字題型的題目來源不同，不能沿用原本的佇列
+  else startRandomQuiz(lastRandomCount);
 }
 
 function shuffle(arr) {
@@ -1848,7 +1876,66 @@ function seededShuffle(arr, seed) {
   return list;
 }
 
+// ==========================================
+// v6.2.8 by Claude：真題模式改用國中教育會考官方原題 (cap_exam_bank.js，含官方答案)
+// 每題轉成作答佇列的項目：en 為正確選項文字 (供錯題本、發音使用)，id 為「年度-題號」
+// ==========================================
+let examDayPlans = {};
+function buildExamItems() {
+  const bank = Array.isArray(window.CAP_OFFICIAL_BANK) ? window.CAP_OFFICIAL_BANK : [];
+  return bank.map(q => ({ ...q, isCap: true, en: q.options["ABCD".indexOf(q.answer)], zh: "" }));
+}
+
+// v6.2.8 by Claude：官方真題依年度 (新到舊)、題號順序平均分配到 30 天，每天 3–4 題，分配固定不變
+function initExamPlans() {
+  examDayPlans = splitIntoDays(buildExamItems());
+  listenDayPlans = splitIntoDays(buildListenItems()); // v6.2.9 by Claude：聽力官方題目，每天 2–3 題
+}
+
+// v6.2.9 by Claude：聽力改用國中教育會考官方聽力原題 (cap_listening_bank.js)，en 為正確選項文字
+let listenDayPlans = {};
+function buildListenItems() {
+  const bank = Array.isArray(window.CAP_LISTENING_OFFICIAL) ? window.CAP_LISTENING_OFFICIAL : [];
+  return bank.map(q => ({ ...q, isCapListen: true, en: q.options["ABC".indexOf(q.answer)], zh: "" }));
+}
+
+// v6.2.9 by Claude：把題目依序平均分配到 30 天 (真題、聽力共用)
+function splitIntoDays(items) {
+  const plans = {};
+  const base = Math.floor(items.length / DAYS_COUNT), rem = items.length % DAYS_COUNT;
+  let cursor = 0;
+  for (let d = 1; d <= DAYS_COUNT; d++) {
+    const n = d <= rem ? base + 1 : base;
+    plans[d] = items.slice(cursor, cursor + n);
+    cursor += n;
+  }
+  return plans;
+}
+
+// v6.2.8 by Claude：取得目前題型第 d 天的題目 (真題用官方題目，其餘題型用單字)
+// v6.2.9 by Claude：聽力用官方聽力題目
+function getDayPlan(d) {
+  const plans = currentQuizType === "exam" ? examDayPlans : currentQuizType === "listen" ? listenDayPlans : dayPlans;
+  return plans[d] || [];
+}
+
+// v6.2.8 by Claude：錯題的識別碼 (真題用「年度-題號」，同一個答案字可能出現在多題)
+function itemId(item) {
+  return item.id || item.en || item.scriptEn;
+}
+
+// v6.2.8 by Claude：目前題型的錯題。真題模式只保留官方真題的錯題；
+// v6.2.7 以前的「真題」錯題其實是單字 (自編題)，無法用官方真題的方式出題，故略過
+function getCurrentMistakes() {
+  const list = userStore.mistakesByQuiz[currentQuizType] || [];
+  if (currentQuizType === "exam") return list.filter(m => m.isCap);
+  // v6.2.9 by Claude：聽力只保留官方聽力題的錯題 (舊的自編聽力題錯題無官方錄音，略過)
+  if (currentQuizType === "listen") return list.filter(m => m.isCapListen);
+  return list;
+}
+
 function initDayPlans() {
+  initExamPlans(); // v6.2.8 by Claude
   const total = FULL_VOCAB.length;
   dayPlans = {};
   if (total === 0) return;
@@ -1901,7 +1988,7 @@ function initDaySelector() {
       alertText = " ⚠️【未做題】";
     }
 
-    opt.innerText = `${checkSymbol}第 ${d} 天 (${targetDateStr})${alertText} (${dayPlans[d]?.length || 0} 題)`;
+    opt.innerText = `${checkSymbol}第 ${d} 天 (${targetDateStr})${alertText} (${getDayPlan(d).length} 題)`; // v6.2.8 by Claude：依題型顯示題數
     
     if (!isCompleted && d < todayNum) {
       opt.style.color = "var(--danger)";
@@ -1932,6 +2019,8 @@ function autoSelectNextDay() {
   }
 }
 
+let lastRandomCount = 100; // v6.2.8 by Claude：記住亂數刷題的題數，切換題型時沿用
+
 function startRandomQuiz(count) {
   if (FULL_VOCAB.length === 0) return alert("題庫載入中！");
   ensureLatestVersion(); // v6.2.4 by Claude：開始新一輪前檢查是否有新版網頁
@@ -1941,8 +2030,12 @@ function startRandomQuiz(count) {
   else if (count === 200) document.getElementById("btnRand200").classList.add("active");
   else document.getElementById("btnRandAll").classList.add("active");
 
-  const shuffled = shuffle(FULL_VOCAB);
-  currentTestQueue = (count === 'all' || count >= FULL_VOCAB.length) ? shuffled : shuffled.slice(0, count);
+  lastRandomCount = count;
+  // v6.2.8 by Claude：真題模式從官方真題中亂數出題，其餘題型從單字題庫出題
+  // v6.2.9 by Claude：聽力從官方聽力題中出題
+  const source = currentQuizType === "exam" ? buildExamItems() : currentQuizType === "listen" ? buildListenItems() : FULL_VOCAB;
+  const shuffled = shuffle(source);
+  currentTestQueue = (count === 'all' || count >= source.length) ? shuffled : shuffled.slice(0, count);
   currentIndex = 0; correctCount = 0; wrongCount = 0;
   document.getElementById("progressBar").style.background = "var(--purple)";
   document.getElementById("poolInfoText").innerText = `亂數特訓 (${currentTestQueue.length} 題)`;
@@ -1961,17 +2054,17 @@ function changeDay(day) {
   const incMistakes = document.getElementById("includeMistakesCheckbox").checked;
 
   let pool = [];
-  const currentMistakes = userStore.mistakesByQuiz[currentQuizType] || [];
+  const currentMistakes = getCurrentMistakes(); // v6.2.8 by Claude
 
+  // v6.2.8 by Claude：改用 getDayPlan (真題模式使用官方真題的每日題目)
   if (scopeType === "cumulative") {
-    for (let d = 1; d <= currentDay; d++) if (dayPlans[d]) pool.push(...dayPlans[d]);
-  } else { pool = (dayPlans[currentDay] || []).slice(); }
+    for (let d = 1; d <= currentDay; d++) pool.push(...getDayPlan(d));
+  } else { pool = getDayPlan(currentDay).slice(); }
 
   if (incMistakes && currentMistakes.length > 0) {
-    currentMistakes.forEach(m => {
-      const targetWord = m.en || (m.scriptEn ? m.scriptEn.slice(0, 15) : "");
-      if (!pool.some(item => (item.en || "") === targetWord)) pool.push(m);
-    });
+    // v6.2.8 by Claude：以 itemId 判斷是否已在題目中 (真題以年度-題號識別)
+    const ids = new Set(pool.map(itemId));
+    currentMistakes.forEach(m => { if (!ids.has(itemId(m))) { ids.add(itemId(m)); pool.push(m); } });
   }
 
   currentTestQueue = shuffle(pool);
@@ -2004,28 +2097,44 @@ function lookupWordDetail(text, fromType) {
   }
 }
 
-function pickDistractors(correctItem, count = 3) {
-  const chosenEn = new Set([correctItem.en.trim().toLowerCase()]);
-  const chosenZh = new Set([correctItem.zh.trim()]);
+// v6.2.8 by Claude：把中文解釋拆成個別意思 (去掉括號說明)，例如「增加；加」→ [增加, 加]
+function zhGlosses(zh) {
+  return (zh || "").replace(/[（(][^）)]*[）)]/g, "").split(/[；;，,、\/]/).map(s => s.replace(/[…．.\s]/g, "").trim()).filter(Boolean);
+}
+
+// v6.2.8 by Claude：干擾選項檢查器。原本只排除「中文完全相同」的字，但題庫有 263 組字共用某個意思
+// (例如 add / increase / gain 都有「增加」)，可能同時出現而有兩個正確答案。
+// 現在只要任一意思與正解或已選的選項重疊就排除
+function makeOptionGuard(correctItem) {
+  const ens = new Set([correctItem.en.trim().toLowerCase()]);
+  const glosses = new Set(zhGlosses(correctItem.zh));
+  return {
+    ok(c) {
+      if (!c || !c.en || !c.zh) return false;
+      if (ens.has(c.en.trim().toLowerCase())) return false;
+      return !zhGlosses(c.zh).some(g => glosses.has(g));
+    },
+    add(c) {
+      ens.add(c.en.trim().toLowerCase());
+      zhGlosses(c.zh).forEach(g => glosses.add(g));
+    }
+  };
+}
+
+function pickDistractors(correctItem, count = 3, guard = makeOptionGuard(correctItem)) {
   const result = [];
   let attempts = 0;
-  while (result.length < count && attempts < 200) {
+  while (result.length < count && attempts < 400) {
     attempts++;
     const candidate = FULL_VOCAB[Math.floor(Math.random() * FULL_VOCAB.length)];
-    if (!candidate || !candidate.en || !candidate.zh) continue;
-    const cEn = candidate.en.trim().toLowerCase(), cZh = candidate.zh.trim();
-    if (!chosenEn.has(cEn) && !chosenZh.has(cZh)) {
-      chosenEn.add(cEn); chosenZh.add(cZh); result.push(candidate);
-    }
+    if (guard.ok(candidate)) { guard.add(candidate); result.push(candidate); } // v6.2.8 by Claude：改用意思重疊檢查
   }
   return result;
 }
 
 function pickHardDistractors(correctItem, count = 3) {
   const correctEn = correctItem.en.trim().toLowerCase();
-  const correctZh = correctItem.zh.trim();
-  const chosenEn = new Set([correctEn]);
-  const chosenZh = new Set([correctZh]);
+  const guard = makeOptionGuard(correctItem); // v6.2.8 by Claude：改用意思重疊檢查
   const result = [];
 
   const candidates = FULL_VOCAB.filter(i => {
@@ -2037,26 +2146,16 @@ function pickHardDistractors(correctItem, count = 3) {
     return lenDiff <= 2 || sameStart;
   });
 
-  const shuffledCandidates = shuffle(candidates);
-  for (let cand of shuffledCandidates) {
+  for (const cand of shuffle(candidates)) {
     if (result.length >= count) break;
-    const cEn = cand.en.trim().toLowerCase();
-    const cZh = cand.zh.trim();
-    if (!chosenEn.has(cEn) && !chosenZh.has(cZh)) {
-      chosenEn.add(cEn);
-      chosenZh.add(cZh);
-      result.push(cand);
-    }
+    if (guard.ok(cand)) { guard.add(cand); result.push(cand); }
   }
 
-  if (result.length < count) {
-    const fallback = pickDistractors(correctItem, count - result.length);
-    result.push(...fallback);
-  }
+  // v6.2.8 by Claude：不足時補一般干擾選項，並沿用同一個檢查器，避免與已選選項重複或同義
+  if (result.length < count) result.push(...pickDistractors(correctItem, count - result.length, guard));
 
   return result;
 }
-
 function renderQuestion() {
   hasAnswered = false;
   document.getElementById("nextBtn").disabled = true;
@@ -2126,29 +2225,35 @@ function renderQuestion() {
   let options = [], answerTarget = "";
 
   if (currentQuizType === "listen") {
-    const lData = CAP_LISTENING_BANK[currentIndex % CAP_LISTENING_BANK.length];
+    // v6.2.9 by Claude：聽力改為國中教育會考官方原題：播放官方錄音，選項 (保留官方 A–C 順序) 與答案取自官方題本與參考答案
+    if (!cur.isCapListen) { // 舊版自編聽力錯題已由 getCurrentMistakes 排除；保險起見略過
+      currentIndex++; return renderQuestion();
+    }
     examTagEl.className = "exam-tag listen-tag";
-    examTagEl.innerHTML = `🎧 <b>【${lData.year}】</b> ${lData.section}`;
+    examTagEl.innerHTML = `🎧 <b>【${escapeHtml(cur.year)}年國中教育會考】</b> 英語聽力 第${escapeHtml(cur.no)}題 ${escapeHtml(cur.part || "")} (官方真題)`;
     examTagEl.classList.remove("hidden");
-    document.getElementById("wordDisplay").innerText = "請仔細聆聽題目音訊";
-    document.getElementById("wordKk").innerText = "[ 點擊按鈕美音朗讀 ]";
+    document.getElementById("wordDisplay").innerText = "請按下方按鈕聆聽官方錄音，再選出答案";
+    document.getElementById("wordKk").innerText = cur.part === "基本問答" ? "[ 選出最適合的回應 ]" : "[ 依對話或短文內容選出答案 ]";
     audioBox.classList.remove("hidden"); soundBtn.classList.add("hidden");
-    answerTarget = lData.answerEn;
-    options = shuffle(lData.options.map(opt => ({ primaryText: opt.en, subText: opt.zh, subKk: "", targetValue: opt.en })));
+    const audio = document.getElementById("listenAudio");
+    audio.removeAttribute("src"); // 換題時清掉上一題的錄音
+    document.getElementById("playAudioBtn").disabled = false;
+    document.getElementById("audioStatusText").innerText = "會考原音，每題內容播放兩次";
+    answerTarget = cur.en;
+    options = cur.options.map(o => ({ primaryText: o, subText: "", subKk: "", targetValue: o }));
   } else if (currentQuizType === "exam") {
+    // v6.2.8 by Claude：真題改為國中教育會考官方原題：題幹、四個選項 (保留官方 A–D 順序) 與答案皆取自官方試題本與參考答案
     audioBox.classList.add("hidden"); soundBtn.classList.remove("hidden");
     examTagEl.className = "exam-tag";
-    const cleanWord = cur.en.trim().toLowerCase();
-    const examData = CAP_EXAM_BANK[cleanWord];
-    examTagEl.innerHTML = examData ? `🏛️ 【${examData.year}】 ${examData.section}` : CAP_YEAR_MAPPING.getSource(cur.en, cur.level);
+    if (!cur.isCap) { // 舊版錯題 (自編題) 已由 getCurrentMistakes 排除；保險起見略過
+      currentIndex++; return renderQuestion();
+    }
+    examTagEl.innerHTML = `🏛️ 【${escapeHtml(cur.year)}年國中教育會考】 英語閱讀 第${escapeHtml(cur.no)}題 (官方真題)`;
     examTagEl.classList.remove("hidden");
     answerTarget = cur.en;
-    // v6.2.5 by Claude：干擾選項排除與正解中文相同的字 (例如 add / increase 都是「增加」)，避免出現兩個正確答案
-    let distStrs = examData ? examData.distractors : pickDistractors(cur, 3).map(i => i.en);
-    const clozeObj = createClozeSentence(examData ? examData.sentence : cur.sentenceEn, cur.en, cur.zh);
-    document.getElementById("wordDisplay").innerHTML = clozeObj.masked;
-    document.getElementById("wordKk").innerText = `[/ 歷屆真題語境 /]`;
-    options = shuffle([cur.en, ...distStrs].map(w => ({ primaryText: w, subText: lookupWordDetail(w, "en").zh, subKk: lookupWordDetail(w, "en").kk, targetValue: w })));
+    document.getElementById("wordDisplay").innerHTML = escapeHtml(cur.stem).replace(/_{3,}/g, '<span class="cloze-blank">_______</span>');
+    document.getElementById("wordKk").innerText = `[/ 歷屆會考真題 /]`;
+    options = cur.options.map(o => ({ primaryText: o, subText: lookupWordDetail(o, "en").zh, subKk: lookupWordDetail(o, "en").kk, targetValue: o }));
   } else if (currentQuizType === "cloze") {
     audioBox.classList.add("hidden"); soundBtn.classList.remove("hidden");
     examTagEl.classList.add("hidden");
@@ -2208,7 +2313,8 @@ function renderQuestion() {
     btn.dataset.target = optObj.targetValue;
     btn.dataset.sub = optObj.subText || "";
     btn.dataset.kk = optObj.subKk || "";
-    btn.innerHTML = `<span class="opt-key">${keys[idx]}</span><div class="opt-content"><span class="opt-primary-text">${optObj.primaryText}</span><span class="opt-sub-text hidden"></span></div>`;
+    // v6.2.8 by Claude：選項文字跳脫後再顯示 (官方真題選項取自 PDF，可能含引號等符號)
+    btn.innerHTML = `<span class="opt-key">${keys[idx]}</span><div class="opt-content"><span class="opt-primary-text">${escapeHtml(optObj.primaryText)}</span><span class="opt-sub-text hidden"></span></div>`;
     btn.onclick = () => checkAnswer(btn, optObj.targetValue, cur, answerTarget);
     grid.appendChild(btn);
   });
@@ -2255,9 +2361,11 @@ function checkAnswer(btn, selectedText, item, answerTarget) {
     wrongCount++;
     
     if (!userStore.mistakesByQuiz[currentQuizType]) userStore.mistakesByQuiz[currentQuizType] = [];
-    const mistakeRecord = currentQuizType === "listen" ? { ...item, quizType: "listen", id: item.scriptEn } : { ...item, quizType: currentQuizType };
-    const identifier = mistakeRecord.en || mistakeRecord.scriptEn;
-    if (!userStore.mistakesByQuiz[currentQuizType].some(m => (m.en || m.scriptEn) === identifier)) {
+    // v6.2.8 by Claude：聽力錯題改存聽力題本身 (原本存成佇列中的單字，錯題特訓時對不上)；識別一律用 itemId
+    // v6.2.9 by Claude：聽力佇列項目本身就是官方聽力題，直接記錄
+    const mistakeRecord = { ...item, quizType: currentQuizType };
+    const identifier = itemId(mistakeRecord);
+    if (!userStore.mistakesByQuiz[currentQuizType].some(m => itemId(m) === identifier)) {
       userStore.mistakesByQuiz[currentQuizType].push(mistakeRecord);
       updateMistakeCount();
     }
@@ -2276,27 +2384,28 @@ function checkAnswer(btn, selectedText, item, answerTarget) {
   expBox.className = "explanation-card";
 
   if (currentQuizType === "listen") {
-    const lData = CAP_LISTENING_BANK[currentIndex % CAP_LISTENING_BANK.length];
-    zhHintEl.innerText = `原文：${lData.scriptEn}\n翻譯：${lData.scriptZh}`;
-    zhHintEl.classList.add("hidden");
-    expBox.innerHTML = `<div class="explanation-title">💡 考點解析</div><span class="sentence-en">• ${lData.scriptEn}</span><span class="sentence-zh">• ${lData.scriptZh}</span><div class="grammar-note">${lData.explanation}</div>`;
+    // v6.2.9 by Claude：聽力解析：官方答案與出處。官方未公布錄音稿，因此不顯示原文，可再播放錄音對照
+    expBox.innerHTML = `<div class="explanation-title">💡 官方答案：(${item.answer}) ${escapeHtml(item.en)}</div><span class="sentence-zh">• 可再按「播放官方錄音」重聽，對照答案</span><div class="grammar-note">資料來源：${escapeHtml(item.year)}年國中教育會考 英語科聽力 第${escapeHtml(item.no)}題 (${escapeHtml(item.part || "")})，答案依官方「選擇題參考答案」</div>`;
   } else if (currentQuizType === "hard") {
     expBox.innerHTML = `<div class="explanation-title">💡 核心單字解析 (高難度混淆特訓)</div><span class="sentence-en">• 英文單字：<b>${item.en}</b> ${item.kk || ''}</span><span class="sentence-zh">• 中文解釋：${item.zh}</span><div class="grammar-note">🔥 高頻易混淆字彙，透過相似拼法強化單字辨識力。</div>`;
+  } else if (currentQuizType === "exam" && item.isCap) {
+    // v6.2.8 by Claude：真題解析：官方答案、填入答案的完整句子與出處 (不另外編寫翻譯，避免與官方內容混淆)
+    const full = escapeHtml(item.stem).replace(/_{3,}/, `<b>${escapeHtml(item.en)}</b>`);
+    expBox.innerHTML = `<div class="explanation-title">💡 官方答案：(${item.answer}) ${escapeHtml(item.en)}</div><span class="sentence-en">• ${full}</span><div class="grammar-note">資料來源：${escapeHtml(item.year)}年國中教育會考 英語科閱讀試題本 第${escapeHtml(item.no)}題，答案依官方「選擇題參考答案」</div>`;
   } else {
-    const examData = CAP_EXAM_BANK[item.en.trim().toLowerCase()];
-    if (["exam", "cloze"].includes(currentQuizType)) {
-      zhHintEl.innerText = examData ? `翻譯：${examData.zh}` : `翻譯：${item.sentenceZh || item.zh}`;
+    // v6.2.8 by Claude：移除舊的 CAP_EXAM_BANK (自編題) 解析；填空題只使用題庫例句
+    if (currentQuizType === "cloze") {
+      zhHintEl.innerText = `翻譯：${item.sentenceZh || item.zh}`;
       zhHintEl.classList.add("hidden");
     }
-    if (examData || item.sentenceEn) {
-      expBox.innerHTML = `<div class="explanation-title">💡 考點解析</div><span class="sentence-en">• ${examData ? examData.sentence.replace('______', item.en) : item.sentenceEn}</span><span class="sentence-zh">• ${examData ? examData.zh : (item.sentenceZh || '')}</span><div class="grammar-note">${examData ? `【${examData.year}】` : ''} 會考核心高頻詞</div>`;
+    if (item.sentenceEn) {
+      expBox.innerHTML = `<div class="explanation-title">💡 考點解析</div><span class="sentence-en">• ${item.sentenceEn}</span><span class="sentence-zh">• ${item.sentenceZh || ''}</span><div class="grammar-note">會考核心高頻詞</div>`;
     } else {
       // v6.2.2 by Claude：v6.2.0 重建的題庫多數單字沒有例句 (PDF 來源無例句)，原本會顯示「• undefined」；
       // 沒有例句時改顯示單字、音標、詞性與中文解釋
       expBox.innerHTML = `<div class="explanation-title">💡 單字解析</div><span class="sentence-en">• 英文單字：<b>${item.en}</b> ${item.kk || ''}</span><span class="sentence-zh">• 中文解釋：${item.pos ? `(${item.pos}) ` : ''}${item.zh}</span><div class="grammar-note">會考核心高頻詞</div>`;
     }
   }
-
   document.getElementById("scoreText").innerText = `正確: ${correctCount} | 錯誤: ${wrongCount}`;
   document.getElementById("nextBtn").disabled = false;
 }
@@ -2309,13 +2418,13 @@ function nextQuestion() {
 }
 
 function updateMistakeCount() {
-  const currentMistakes = userStore.mistakesByQuiz[currentQuizType] || [];
+  const currentMistakes = getCurrentMistakes(); // v6.2.8 by Claude：真題只計官方真題錯題
   const typeNames = { wordDef: "單字", hard: "單字(難)", cloze: "填空", exam: "真題", listen: "聽力" };
   document.getElementById("mistakeLink").innerText = `${typeNames[currentQuizType] || ''}錯題 (${currentMistakes.length})`;
 }
 
 function reviewMistakes() {
-  const currentMistakes = userStore.mistakesByQuiz[currentQuizType] || [];
+  const currentMistakes = getCurrentMistakes(); // v6.2.8 by Claude：真題只練官方真題錯題
   if (currentMistakes.length === 0) return alert("目前當前題型無錯題！");
   ensureLatestVersion(); // v6.2.4 by Claude：開始新一輪前檢查是否有新版網頁
   isRandomMode = false;
@@ -2354,6 +2463,11 @@ function toggleHistory() {
 function speakCurrentWord() {
   if (currentIndex >= currentTestQueue.length) return;
   const cur = currentTestQueue[currentIndex];
+  // v6.2.8 by Claude：真題作答前朗讀題幹 (空格唸成 blank)，作答後才唸出含答案的完整句子，避免發音按鈕洩漏答案
+  if (cur.isCap) {
+    speakPureUS(cur.stem.replace(/_{3,}/g, hasAnswered ? cur.en : "blank"));
+    return;
+  }
   speakPureUS(cur.en || cur.scriptEn || "");
 }
 
@@ -2380,7 +2494,7 @@ window.addEventListener("keydown", (e) => {
 // (登入、切換天數或題型、亂數刷題、錯題特訓) 時重新比對，伺服器上有新版就先存檔再強制重新整理。
 // 只在一輪開始、尚未作答時檢查，不會中斷作答；最快每 60 秒檢查一次，離線時略過。
 // ==========================================
-const VERSION_CHECK_FILES = ["vocab-quiz-30days.html", "vocab2000.js"];
+const VERSION_CHECK_FILES = ["vocab-quiz-30days.html", "vocab2000.js", "cap_exam_bank.js", "cap_listening_bank.js"]; // v6.2.8/v6.2.9 by Claude：加入真題、聽力題庫
 const VERSION_CHECK_INTERVAL_MS = 60 * 1000;
 let versionBaseline = null, lastVersionCheck = 0, versionCheckRunning = false;
 

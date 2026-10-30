@@ -10,7 +10,7 @@ REM
 REM 與舊版差異 (v6.2.3 by Claude)：
 REM   - 不再 git init / 重設 origin / push -f，避免覆蓋 GitHub 上的版本歷史
 REM   - 依 .gitignore 排除 PDF、APK、zip，不會把第三方教材推上公開 repo
-REM   - 網站只更新 vocab-quiz-30days.html、vocab2000.js、sw.js、manifest.json，
+REM   - 網站只更新 vocab-quiz-30days.html、vocab2000.js、cap_exam_bank.js (v6.2.8 起)、sw.js、manifest.json，
 REM     同資料夾的 2000words.html、vocab.html、圖示等其他檔案一律不動
 REM
 REM 用法：直接雙擊執行；加參數 test (uploadgithub.bat test) 為演練模式，
@@ -85,10 +85,21 @@ if errorlevel 1 (
 if not exist "%TEMP_DIR%\exams\eng" mkdir "%TEMP_DIR%\exams\eng"
 
 REM v6.2.3 by Claude：只複製這 4 個檔案；舊版的 *.png 一併複製已移除 (網站圖示與 2000words.html 共用)
-for %%F in (vocab-quiz-30days.html vocab2000.js sw.js manifest.json) do (
+REM v6.2.8 by Claude：加入官方真題題庫 cap_exam_bank.js；v6.2.9 by Claude：加入官方聽力題庫 cap_listening_bank.js
+for %%F in (vocab-quiz-30days.html vocab2000.js cap_exam_bank.js cap_listening_bank.js sw.js manifest.json) do (
     copy /y "%~dp0%%F" "%TEMP_DIR%\exams\eng\" >nul
     if errorlevel 1 (
         echo [錯誤] 複製 %%F 失敗
+        goto :fail
+    )
+)
+
+REM v6.2.9 by Claude：同步官方聽力錄音資料夾 listen\ (只新增/更新，不刪除網站上的其他檔案)
+if exist "%~dp0listen" (
+    if not exist "%TEMP_DIR%\exams\eng\listen" mkdir "%TEMP_DIR%\exams\eng\listen"
+    copy /y "%~dp0listen\*.mp3" "%TEMP_DIR%\exams\eng\listen\" >nul
+    if errorlevel 1 (
+        echo [錯誤] 複製聽力錄音失敗
         goto :fail
     )
 )

@@ -50,22 +50,24 @@ const check = (name, ok, detail = "") => { results.push({ name, ok: !!ok, detail
     const problems = [];
     for (const t of ["wordDef", "hard", "cloze", "exam", "listen"]) {
       setQuizType(t);
-      isRandomMode = true; currentTestQueue = pool.slice(); currentIndex = 0; correctCount = 0; wrongCount = 0;
-      for (let i = 0; i < pool.length; i++) {
+      // v6.2.8: exam mode uses the official CAP questions instead of vocabulary words
+      const tpool = t === "exam" ? buildExamItems() : t === "listen" ? buildListenItems() : pool; // v6.2.9: official listening items
+      isRandomMode = true; currentTestQueue = tpool.slice(); currentIndex = 0; correctCount = 0; wrongCount = 0;
+      for (let i = 0; i < tpool.length; i++) {
         renderQuestion();
         const btns = [...document.querySelectorAll(".option-btn")];
         const disp = document.getElementById("wordDisplay").innerText;
         const targets = btns.map(b => b.dataset.target);
         const need = t === "listen" ? 3 : 4;
-        if (btns.length !== need) problems.push(`${t}:${pool[i].en}: ${btns.length} options`);
-        if (new Set(targets).size !== targets.length) problems.push(`${t}:${pool[i].en}: duplicate options ${targets.join("|")}`);
-        if (/undefined|null/.test(disp)) problems.push(`${t}:${pool[i].en}: display "${disp.slice(0, 60)}"`);
-        const correct = btns.find(b => b.dataset.target === (t === "wordDef" ? pool[i].zh : t === "listen" ? null : pool[i].en));
-        if (t !== "listen" && !correct) problems.push(`${t}:${pool[i].en}: correct answer missing`);
+        if (btns.length !== need) problems.push(`${t}:${tpool[i].en}: ${btns.length} options`);
+        if (new Set(targets).size !== targets.length) problems.push(`${t}:${tpool[i].en}: duplicate options ${targets.join("|")}`);
+        if (/undefined|null/.test(disp)) problems.push(`${t}:${tpool[i].en}: display "${disp.slice(0, 60)}"`);
+        const correct = btns.find(b => b.dataset.target === (t === "wordDef" ? tpool[i].zh : tpool[i].en));
+        if (!correct) problems.push(`${t}:${tpool[i].en}: correct answer missing`);
         (correct || btns[0]).click();
         const exp = document.getElementById("explanationBox").innerText;
-        if (/undefined/.test(exp)) problems.push(`${t}:${pool[i].en}: explanation has undefined`);
-        if (t !== "listen" && correct && !correct.classList.contains("correct")) problems.push(`${t}:${pool[i].en}: correct option not marked`);
+        if (/undefined/.test(exp)) problems.push(`${t}:${tpool[i].en}: explanation has undefined`);
+        if (correct && !correct.classList.contains("correct")) problems.push(`${t}:${tpool[i].en}: correct option not marked`);
         currentIndex++;
         if (problems.length > 25) break;
       }
@@ -222,7 +224,7 @@ const check = (name, ok, detail = "") => { results.push({ name, ok: !!ok, detail
   // v6.2.5: cloze/exam distractors never share the answer's zh; cloze masking edge cases
   const t13 = await page.evaluate(() => {
     const bad = [];
-    for (const t of ["cloze", "exam"]) {
+    for (const t of ["cloze"]) { // v6.2.8: exam now uses official CAP questions (checked in T15)
       setQuizType(t);
       const pool = shuffle(FULL_VOCAB).slice(0, 400);
       isRandomMode = true; currentTestQueue = pool; currentIndex = 0;
@@ -230,7 +232,7 @@ const check = (name, ok, detail = "") => { results.push({ name, ok: !!ok, detail
         renderQuestion();
         const opts = [...document.querySelectorAll(".option-btn")].map(b => b.dataset.target);
         const ansZh = pool[i].zh;
-        if (!CAP_EXAM_BANK[pool[i].en.toLowerCase()]) opts.filter(o => o !== pool[i].en).forEach(o => { const w = VOCAB_MAP_EN[o.toLowerCase()]; if (w && w.zh === ansZh) bad.push(`${t}:${pool[i].en}/${o}`); });
+        opts.filter(o => o !== pool[i].en).forEach(o => { const w = VOCAB_MAP_EN[o.toLowerCase()]; if (w && w.zh === ansZh) bad.push(`${t}:${pool[i].en}/${o}`); });
         currentIndex++;
       }
     }
@@ -307,6 +309,95 @@ const check = (name, ok, detail = "") => { results.push({ name, ok: !!ok, detail
   check("T14c 雲端舊格式與本機紀錄合併不遺失", JSON.stringify(t14.wordDefDays) === '["Day_1","Day_2"]' && t14.hardDays.includes("Day_1") && t14.mistakes.includes("cable") && t14.totalQ === 100, JSON.stringify(t14));
   check("T14d 上傳成功且重新整理後讀回五大題型紀錄", t14.uploaded && t14.status.includes("已同步") && JSON.stringify(t14.afterReload.wordDefDays) === '["Day_1","Day_2"]' && t14.afterReload.hardDays.includes("Day_1") && t14.adminHist.includes("Day_1"), JSON.stringify({ up: t14.uploaded, st: t14.status, ar: t14.afterReload }));
 
+  // T15 (v6.2.8) every official CAP question: official text, official A-D order, official answer marked correct
+  const t15 = await page.evaluate(() => {
+    const bank = window.CAP_OFFICIAL_BANK || [];
+    const bad = [];
+    setQuizType("exam");
+    isRandomMode = true; currentTestQueue = buildExamItems(); currentIndex = 0;
+    for (let i = 0; i < bank.length; i++) {
+      const q = bank[i];
+      renderQuestion();
+      const tag = document.getElementById("examSourceTag").innerText;
+      const disp = document.getElementById("wordDisplay").innerText;
+      const btns = [...document.querySelectorAll(".option-btn")];
+      if (!tag.includes(`${q.year}年國中教育會考`) || !tag.includes(`第${q.no}題`)) bad.push(`${q.id}: tag "${tag}"`);
+      if (q.stem.includes("______") && !document.querySelector("#wordDisplay .cloze-blank")) bad.push(`${q.id}: blank not shown`);
+      if (btns.map(b => b.dataset.target).join("|") !== q.options.join("|")) bad.push(`${q.id}: option order differs from official`);
+      const correctBtn = btns["ABCD".indexOf(q.answer)];
+      const wrongBtn = btns.find(b => b !== correctBtn);
+      // answer the WRONG option: the official answer must still be the one highlighted as correct
+      wrongBtn.click();
+      if (!correctBtn.classList.contains("correct")) bad.push(`${q.id}: official answer ${q.answer} not marked correct`);
+      if (btns.filter(b => b.classList.contains("correct")).length !== 1) bad.push(`${q.id}: more than one option marked correct`);
+      const exp = document.getElementById("explanationBox").innerText;
+      if (!exp.includes(`官方答案：(${q.answer})`)) bad.push(`${q.id}: explanation "${exp.slice(0, 40)}"`);
+      if (/undefined|null/.test(disp + exp)) bad.push(`${q.id}: undefined in text`);
+      currentIndex++;
+    }
+    const plan = Object.values(examDayPlans).map(d => d.length);
+    return { total: bank.length, bad, planTotal: plan.reduce((a, b) => a + b, 0), planMin: Math.min(...plan), planMax: Math.max(...plan),
+             mistakeIsCap: (userStore.mistakesByQuiz.exam || []).every(m => m.isCap) };
+  });
+  check(`T15a 官方真題 ${t15.total} 題：出處、空格、官方選項順序、官方答案判定全部正確`, t15.total >= 100 && t15.bad.length === 0, t15.bad.slice(0, 6).join(" ; "));
+  check("T15b 真題平均分配到 30 天 (每天 3–4 題) 且錯題本只記官方真題", t15.planTotal === t15.total && t15.planMin >= 3 && t15.planMax <= 4 && t15.mistakeIsCap, JSON.stringify({ planTotal: t15.planTotal, min: t15.planMin, max: t15.planMax }));
+
+  // T16 (v6.2.8) wordDef / hard / cloze: no distractor shares any meaning with the answer, across the whole word list
+  const t16 = await page.evaluate(() => {
+    const bad = [];
+    for (const t of ["wordDef", "hard", "cloze"]) {
+      setQuizType(t);
+      isRandomMode = true; currentTestQueue = FULL_VOCAB.slice(); currentIndex = 0;
+      for (let i = 0; i < FULL_VOCAB.length; i++) {
+        const w = FULL_VOCAB[i];
+        renderQuestion();
+        const ans = new Set(zhGlosses(w.zh));
+        [...document.querySelectorAll(".option-btn")].forEach(b => {
+          const opt = t === "wordDef" ? { en: b.dataset.sub, zh: b.dataset.target } : (VOCAB_MAP_EN[b.dataset.target.toLowerCase()] || {});
+          if (opt.en && opt.en.toLowerCase() !== w.en.toLowerCase() && zhGlosses(opt.zh).some(g => ans.has(g))) bad.push(`${t}:${w.en}(${w.zh}) vs ${opt.en}(${opt.zh})`);
+        });
+        currentIndex++;
+        if (bad.length > 20) break;
+      }
+    }
+    return { checked: FULL_VOCAB.length * 3, bad };
+  });
+  check(`T16 單字/單字(難)/填空 全部 ${t16.checked} 題無同義的第二個正解`, t16.bad.length === 0, t16.bad.slice(0, 6).join(" ; "));
+
+  // T17 (v6.2.9) every official CAP listening item: label, official A-C order, official answer, audio reachable, mistakes
+  const t17 = await page.evaluate(async () => {
+    const bank = window.CAP_LISTENING_OFFICIAL || [];
+    const bad = [];
+    setQuizType("listen");
+    userStore.mistakesByQuiz.listen = [];
+    isRandomMode = true; currentTestQueue = buildListenItems(); currentIndex = 0;
+    for (let i = 0; i < bank.length; i++) {
+      const q = bank[i];
+      renderQuestion();
+      const tag = document.getElementById("examSourceTag").innerText;
+      const btns = [...document.querySelectorAll(".option-btn")];
+      if (!tag.includes(`${q.year}年國中教育會考`) || !tag.includes(`第${q.no}題`)) bad.push(`${q.id}: tag "${tag}"`);
+      if (btns.map(b => b.dataset.target).join("|") !== q.options.join("|")) bad.push(`${q.id}: option order differs from official`);
+      playCurrentListeningAudio();
+      const audio = document.getElementById("listenAudio");
+      if (!audio.src.endsWith(q.audio)) bad.push(`${q.id}: audio src ${audio.src}`);
+      stopAllAudio();
+      const head = await fetch(q.audio, { method: "HEAD" });
+      if (!head.ok) bad.push(`${q.id}: audio ${q.audio} HTTP ${head.status}`);
+      const correctBtn = btns["ABC".indexOf(q.answer)];
+      btns.find(b => b !== correctBtn).click(); // answer wrong on purpose
+      if (!correctBtn.classList.contains("correct")) bad.push(`${q.id}: official answer ${q.answer} not marked correct`);
+      if (!document.getElementById("explanationBox").innerText.includes(`官方答案：(${q.answer})`)) bad.push(`${q.id}: explanation`);
+      currentIndex++;
+    }
+    const plan = Object.values(listenDayPlans).map(d => d.length);
+    const mistakes = userStore.mistakesByQuiz.listen;
+    reviewMistakes();
+    return { total: bank.length, bad, planTotal: plan.reduce((a, b) => a + b, 0), planMin: Math.min(...plan), planMax: Math.max(...plan),
+             mistakesOk: mistakes.length === bank.length && mistakes.every(m => m.isCapListen && m.audio), reviewOk: currentTestQueue.length === bank.length && !!currentListeningItem() };
+  });
+  check(`T17a 官方聽力 ${t17.total} 題：出處、官方選項順序、官方答案判定、官方錄音可下載`, t17.total >= 60 && t17.bad.length === 0, t17.bad.slice(0, 6).join(" ; "));
+  check("T17b 聽力平均分配到 30 天，錯題本記錄官方聽力題且可錯題特訓", t17.planTotal === t17.total && t17.planMin >= 2 && t17.planMax <= 3 && t17.mistakesOk && t17.reviewOk, JSON.stringify({ planTotal: t17.planTotal, min: t17.planMin, max: t17.planMax, m: t17.mistakesOk, r: t17.reviewOk }));
   // T9 service worker + offline
   await page.reload({ waitUntil: "networkidle0" });
   await page.evaluate(() => navigator.serviceWorker.ready);
