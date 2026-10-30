@@ -1,0 +1,13 @@
+# v6.2.3 by Claude：不上傳到公開 GitHub 的檔案
+
+# 題庫來源 PDF：內含第三方教材 (均一講義等) 有著作權，僅保留在本機供 tools/build.py 重建題庫使用
+*.pdf
+
+# 與本專案無關或過大的檔案 (APK 53MB、Google Play 打包檔)
+*.apk
+*.zip
+單字特訓2000 - Google Play package/
+
+# 工具產生的暫存
+__pycache__/
+node_modules/

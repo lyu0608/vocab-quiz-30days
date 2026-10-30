@@ -1,0 +1,28 @@
+{
+  "name": "英語單字特訓 App (會考真題版)",
+  "short_name": "單字特訓",
+  "description": "國中會考 2000 單字特訓、純淨美音聽力與歷屆真題刷題工具",
+  "start_url": "./vocab-quiz-30days.html",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#2563eb",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

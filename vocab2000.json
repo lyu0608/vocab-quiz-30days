@@ -1,0 +1,326 @@
+[
+  {
+    "en": "a",
+    "kk": "[ə]",
+    "zh": "(個;隻…)",
+    "level": 1,
+    "sentenceEn": "I have a big dog.",
+    "sentenceZh": "我有一隻大狗。",
+    "grammar": "冠詞用法"
+  },
+  {
+    "en": "A.M.",
+    "kk": "[ˈeˈɛm]",
+    "zh": "上午；午前",
+    "level": 1,
+    "sentenceEn": "The school bell rings at 8:00 A.M. every weekday morning.",
+    "sentenceZh": "每個平日早晨八點，學校的鐘聲都會響起。",
+    "grammar": "時間副詞"
+  },
+  {
+    "en": "ability",
+    "kk": "[əˈbɪləti]",
+    "zh": "能力、才幹",
+    "level": 1,
+    "sentenceEn": "She has the ability to speak three languages.",
+    "sentenceZh": "她具備講三種語言的能力。",
+    "grammar": "搭配：ability to + 原形V"
+  },
+  {
+    "en": "able",
+    "kk": "[ˈebəl]",
+    "zh": "有能力的",
+    "level": 1,
+    "sentenceEn": "Will you be able to attend the meeting tomorrow?",
+    "sentenceZh": "你明天能參加會議嗎？",
+    "grammar": "句型：be able to + 原形V"
+  },
+  {
+    "en": "abroad",
+    "kk": "[əˈbrɔd]",
+    "zh": "在國外",
+    "level": 1,
+    "sentenceEn": "My brother went abroad to study medicine.",
+    "sentenceZh": "我哥哥出國去學醫了。",
+    "grammar": "搭配：study / travel abroad"
+  },
+  {
+    "en": "absent",
+    "kk": "[ˈæbsənt]",
+    "zh": "缺席的",
+    "level": 2,
+    "sentenceEn": "Tom was absent from school due to a heavy cold.",
+    "sentenceZh": "湯姆因重感冒向學校請假缺席。",
+    "grammar": "搭配：be absent from"
+  },
+  {
+    "en": "accept",
+    "kk": "[əkˈsɛpt]",
+    "zh": "接受、認可",
+    "level": 2,
+    "sentenceEn": "Please accept this gift as a token of my thanks.",
+    "sentenceZh": "請收下這份禮物以表謝意。",
+    "grammar": "搭配：accept an invitation / gift"
+  },
+  {
+    "en": "accident",
+    "kk": "[ˈæksədənt]",
+    "zh": "意外事故",
+    "level": 2,
+    "sentenceEn": "He was injured in a car accident yesterday.",
+    "sentenceZh": "他昨天在一場車禍中受了傷。",
+    "grammar": "搭配：by accident (偶然)"
+  },
+  {
+    "en": "Dragon-boat Festival",
+    "kk": "[ˈdrægən bot ˈfɛstəvəl]",
+    "zh": "端午節",
+    "level": 2,
+    "sentenceEn": "We eat rice dumplings and watch boat races on Dragon-boat Festival.",
+    "sentenceZh": "我們在端午節吃肉粽並觀賞划龍舟比賽。",
+    "grammar": "臺灣重要節慶文化"
+  },
+  {
+    "en": "Lantern Festival",
+    "kk": "[ˈlæntɚn ˈfɛstəvəl]",
+    "zh": "元宵節",
+    "level": 2,
+    "sentenceEn": "People enjoy solving riddles and eating sweet dumplings during the Lantern Festival.",
+    "sentenceZh": "人們在元宵節時喜歡猜燈謎和吃元宵。",
+    "grammar": "臺灣重要節慶文化"
+  },
+  {
+    "en": "Double Tenth Day",
+    "kk": "[ˈdʌb! tɛnθ de]",
+    "zh": "國慶日",
+    "level": 2,
+    "sentenceEn": "A magnificent fireworks display was held on Double Tenth Day.",
+    "sentenceZh": "國慶日當天舉行了壯麗的煙火表演。",
+    "grammar": "國定假日"
+  },
+  {
+    "en": "Teacher's Day",
+    "kk": "[ˈtitʃɚz de]",
+    "zh": "教師節",
+    "level": 2,
+    "sentenceEn": "Students write greeting cards to thank their instructors on Teacher's Day.",
+    "sentenceZh": "學生們在教師節寫感謝卡向老師致意。",
+    "grammar": "節慶假日"
+  },
+  {
+    "en": "Mother's Day",
+    "kk": "[ˈmʌðɚz de]",
+    "zh": "母親節",
+    "level": 2,
+    "sentenceEn": "Children give carnations to show their love on Mother's Day.",
+    "sentenceZh": "孩子們在母親節獻上康乃馨表達愛意。",
+    "grammar": "節慶假日"
+  },
+  {
+    "en": "New Year's Eve",
+    "kk": "[nju jɪrz iv]",
+    "zh": "除夕夜；跨年夜",
+    "level": 2,
+    "sentenceEn": "The whole family gathers together for a reunion dinner on New Year's Eve.",
+    "sentenceZh": "全家人在除夕夜團聚吃團圓飯。",
+    "grammar": "節慶假日"
+  },
+  {
+    "en": "Confucius",
+    "kk": "[kənˈfjuʃəs]",
+    "zh": "孔子",
+    "level": 3,
+    "sentenceEn": "Confucius is one of the most famous teachers and philosophers in Chinese history.",
+    "sentenceZh": "孔子是中國歷史上最著名的教育家與哲學家之一。",
+    "grammar": "歷史人物"
+  },
+  {
+    "en": "Hualien",
+    "kk": "[hwa-ljɛn]",
+    "zh": "花蓮",
+    "level": 1,
+    "sentenceEn": "Taroko Gorge is a world-renowned natural wonder located in Hualien.",
+    "sentenceZh": "太魯閣峽谷是位於花蓮舉世聞名的自然奇景。",
+    "grammar": "臺灣地名"
+  },
+  {
+    "en": "Kaohsiung",
+    "kk": "[kaʊ-ʃjʊŋ]",
+    "zh": "高雄",
+    "level": 1,
+    "sentenceEn": "Kaohsiung is a major international port city in southern Taiwan.",
+    "sentenceZh": "高雄是臺灣南部的重要國際港口城市。",
+    "grammar": "臺灣地名"
+  },
+  {
+    "en": "Taichung",
+    "kk": "[taɪ-tʃʊŋ]",
+    "zh": "台中",
+    "level": 1,
+    "sentenceEn": "The weather in Taichung is generally mild and comfortable throughout the year.",
+    "sentenceZh": "台中的氣候全年大多溫暖舒適。",
+    "grammar": "臺灣地名"
+  },
+  {
+    "en": "Tainan",
+    "kk": "[taɪ-nɑn]",
+    "zh": "台南",
+    "level": 1,
+    "sentenceEn": "Tainan is famous for its rich history and delicious street snacks.",
+    "sentenceZh": "台南以其悠久的歷史和美味的街頭小吃聞名。",
+    "grammar": "臺灣地名"
+  },
+  {
+    "en": "tofu",
+    "kk": "[ˈtofu]",
+    "zh": "豆腐",
+    "level": 1,
+    "sentenceEn": "Stinky tofu is a beloved local delicacy in Taiwan night markets.",
+    "sentenceZh": "臭豆腐是臺灣夜市裡廣受歡迎的地道美食。",
+    "grammar": "飲食生活"
+  },
+  {
+    "en": "soy-sauce",
+    "kk": "[sɔɪ sɔs]",
+    "zh": "醬油",
+    "level": 2,
+    "sentenceEn": "Dip the dumpling in a little soy-sauce to enhance its flavor.",
+    "sentenceZh": "把水餃沾點醬油能增添風味。",
+    "grammar": "飲食生活"
+  },
+  {
+    "en": "wok",
+    "kk": "[wɑk]",
+    "zh": "鐵鍋；中式炒菜鍋",
+    "level": 2,
+    "sentenceEn": "The chef cooked the fried rice quickly using a large wok.",
+    "sentenceZh": "大廚用一口大鐵鍋迅速炒出美味的炒飯。",
+    "grammar": "廚房器具"
+  },
+  {
+    "en": "ketchup",
+    "kk": "[ˈkɛtʃəp]",
+    "zh": "番茄醬",
+    "level": 1,
+    "sentenceEn": "Would you like some ketchup with your French fries?",
+    "sentenceZh": "你的薯條需要來點番茄醬嗎？",
+    "grammar": "飲食調味"
+  },
+  {
+    "en": "brunch",
+    "kk": "[brʌntʃ]",
+    "zh": "早午餐",
+    "level": 1,
+    "sentenceEn": "We had a relaxed Sunday brunch with pancakes and fresh juice.",
+    "sentenceZh": "我們在週日悠閒地享用了鬆餅配鮮果汁的早午餐。",
+    "grammar": "現代生活用語"
+  },
+  {
+    "en": "doughnut",
+    "kk": "[ˈdonʌt]",
+    "zh": "甜甜圈",
+    "level": 1,
+    "sentenceEn": "The sweet chocolate doughnut goes perfectly with a cup of hot milk.",
+    "sentenceZh": "香甜的巧克力甜甜圈和熱牛奶是絕配。",
+    "grammar": "甜點零食"
+  },
+  {
+    "en": "guava",
+    "kk": "[ˈgwɑvə]",
+    "zh": "番石榴；芭樂",
+    "level": 1,
+    "sentenceEn": "Fresh Taiwanese guava sprinkled with plum powder tastes wonderful.",
+    "sentenceZh": "新鮮臺灣芭樂灑上梅子粉吃起來非常美味。",
+    "grammar": "水果名稱"
+  },
+  {
+    "en": "papaya",
+    "kk": "[pəˈpaɪə]",
+    "zh": "木瓜",
+    "level": 1,
+    "sentenceEn": "Papaya milk is a popular beverage you can find in many drink shops.",
+    "sentenceZh": "木瓜牛奶是在許多手搖飲料店隨處可見的人氣飲品。",
+    "grammar": "水果名稱"
+  },
+  {
+    "en": "hippopotamus",
+    "kk": "[ˌhɪpəˈpɑtəməs]",
+    "zh": "河馬",
+    "level": 2,
+    "sentenceEn": "The large hippopotamus loves staying underwater during hot sunny days.",
+    "sentenceZh": "體型龐大的河馬在炎熱晴朗的日子裡喜歡泡在水底。",
+    "grammar": "動物名稱"
+  },
+  {
+    "en": "koala",
+    "kk": "[koˈɑlə]",
+    "zh": "無尾熊",
+    "level": 1,
+    "sentenceEn": "The baby koala climbed up the eucalyptus tree slowly.",
+    "sentenceZh": "無尾熊寶寶緩緩爬上了尤加利樹。",
+    "grammar": "動物名稱"
+  },
+  {
+    "en": "cockroach",
+    "kk": "[ˈkɑkrotʃ]",
+    "zh": "蟑螂",
+    "level": 2,
+    "sentenceEn": "Keep the kitchen clean so you won't attract any cockroaches.",
+    "sentenceZh": "保持廚房整潔才不會招來蟑螂。",
+    "grammar": "昆蟲名稱"
+  },
+  {
+    "en": "frisbee",
+    "kk": "[ˈfrɪzbi]",
+    "zh": "飛盤",
+    "level": 1,
+    "sentenceEn": "The children had fun throwing the frisbee on the lawn.",
+    "sentenceZh": "孩子們在草地上開心地玩著擲飛盤遊戲。",
+    "grammar": "休閒活動"
+  },
+  {
+    "en": "sneakers",
+    "kk": "[ˈsnikɚz]",
+    "zh": "運動鞋；布鞋",
+    "level": 1,
+    "sentenceEn": "Put on your comfortable sneakers before we go for a jog.",
+    "sentenceZh": "在我們去慢跑前，請穿上你舒適的運動鞋。",
+    "grammar": "服飾鞋類"
+  },
+  {
+    "en": "talkative",
+    "kk": "[ˈtɔkətɪv]",
+    "zh": "健談的；多話的",
+    "level": 2,
+    "sentenceEn": "He is a talkative student who always brings laughter to the class.",
+    "sentenceZh": "他是個健談的學生，總是為班上帶來歡笑。",
+    "grammar": "個性形容詞"
+  },
+  {
+    "en": "sneaky",
+    "kk": "[ˈsniki]",
+    "zh": "鬼鬼祟祟的",
+    "level": 2,
+    "sentenceEn": "The cat made a sneaky move to snatch the fish from the table.",
+    "sentenceZh": "那隻貓鬼鬼祟祟地移動，想偷吃桌上的魚。",
+    "grammar": "狀態形容詞"
+  },
+  {
+    "en": "yummy",
+    "kk": "[ˈjʌmi]",
+    "zh": "美味的；好吃的",
+    "level": 1,
+    "sentenceEn": "Mom made a yummy chicken soup for dinner tonight.",
+    "sentenceZh": "媽媽今晚做了一道美味可口的雞湯作為晚餐。",
+    "grammar": "口語形容詞"
+  },
+  {
+    "en": "yeah",
+    "kk": "[jɛ]",
+    "zh": "是；對（口語）",
+    "level": 1,
+    "sentenceEn": "Yeah, that's exactly what I was talking about!",
+    "sentenceZh": "對，那完全就是我剛才在說的事！",
+    "grammar": "口語感嘆詞"
+  }
+]
