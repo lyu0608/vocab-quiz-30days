@@ -808,6 +808,30 @@
     </div>
     <div class="modal-body">
       <div class="history-item">
+        <div class="history-tag">v6.2.5 by Claude - 程式碼審查修正 (安全性與資料保護)</div>
+        <div class="history-desc">
+          <ul>
+            <li><b>後台 XSS 防護：</b>學員 email 等資料顯示於後台與帳號清單前一律跳脫，防止植入惡意程式竊取管理者登入。</li>
+            <li><b>管理者帳號：</b>不再於本機保存管理者 session，無法在共用裝置上免密碼切換成管理者。</li>
+            <li><b>防止雲端進度被覆蓋：</b>離線開啟或讀取雲端失敗時，暫停上傳，直到成功讀取雲端進度為止 (原本會用空白資料覆蓋雲端)；讀取失敗也不再誤顯示「已同步」。</li>
+            <li><b>帳號切換：</b>網路異常時不再刪除仍有效的登入；登入另一帳號、登出時不再沿用前一位學員的進度；登出或切換前先上傳尚未同步的進度；從訪客模式註冊後會正常同步雲端。</li>
+            <li><b>出題修正：</b>填空/真題的干擾選項排除與正解中文相同的字，避免兩個正確答案；例句找不到該字時改以中文出題，不再洩漏答案；A.M.、Mr. 等字可正確挖空。</li>
+            <li><b>離線快取：</b>只清除本 App 的舊快取，不影響同網域其他網頁。</li>
+            <li><b>上傳腳本：</b>檢查網站 commit 是否成功、移除說明中的雙引號；演練模式不再更動暫存區。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="history-item">
+        <div class="history-tag">v6.2.4 by Claude - 開始做題時自動同步最新網頁</div>
+        <div class="history-desc">
+          <ul>
+            <li><b>自動更新：</b>每次開始新一輪做題 (登入、切換天數或題型、亂數刷題、錯題特訓) 時，檢查網站上的網頁與題庫是否有新版；有新版會先將進度同步到雲端，再自動重新整理載入最新版。</li>
+            <li>只在一輪開始、尚未作答時檢查，不會打斷作答；最快每 60 秒檢查一次，離線時略過。</li>
+            <li>離線快取 `sw.js` 註冊時不使用瀏覽器快取 (`updateViaCache: 'none'`)，新版快取能更快生效。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="history-item">
         <div class="history-tag">v6.2.3 by Claude - 離線快取與 App 安裝修正</div>
         <div class="history-desc">
           <ul>
@@ -1034,11 +1058,28 @@ function getDefaultStore() {
 }
 
 let userStore = getDefaultStore();
+
+// v6.2.5 by Claude：補齊進度資料缺少的欄位 (舊資料或本機紀錄可能不完整)
+function normalizeStore(store) {
+  const s = store ? JSON.parse(JSON.stringify(store)) : getDefaultStore();
+  const d = getDefaultStore();
+  if (!s.historyByQuiz) s.historyByQuiz = d.historyByQuiz;
+  if (!s.mistakesByQuiz) s.mistakesByQuiz = d.mistakesByQuiz;
+  if (!s.stats) s.stats = d.stats;
+  if (s.stats.startDate) s.startDate = s.stats.startDate;
+  return s;
+}
 const DAYS_COUNT = 30;
 const KNOWN_USERS_KEY = "known_vocab_users_list";
 
 function getKnownUsers() {
   try { return JSON.parse(localStorage.getItem(KNOWN_USERS_KEY) || "[]"); } catch (e) { return []; }
+}
+
+// v6.2.5 by Claude：把文字轉成 HTML 安全字元。資料庫的 email 欄位可由學員自行寫入，
+// 原本直接放進後台表格的 innerHTML，可被植入惡意程式 (XSS) 竊取管理者登入；顯示前一律跳脫
+function escapeHtml(value) {
+  return String(value == null ? "" : value).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
 function saveKnownUser(userObj, sessionObj, storeObj) {
@@ -1048,7 +1089,9 @@ function saveKnownUser(userObj, sessionObj, storeObj) {
   // v6.2.2 by Claude：同步時多半以 sessionObj = null 呼叫，原本會把已存的 session 覆蓋成 null，
   // 造成「免密碼切換」失效；改為沒有傳入新 session 時保留原本的 session
   const prevSession = existingIdx >= 0 ? list[existingIdx].session : null;
-  const record = { id: userObj.id, email: userObj.email, session: sessionObj || prevSession || null, store: storeObj || getDefaultStore(), lastActive: new Date().toISOString() };
+  // v6.2.5 by Claude：管理者帳號不保存 session，避免管理者在共用/學生裝置登入過後，任何人都能免密碼切換成管理者
+  const isAdmin = userObj.email === ADMIN_EMAIL;
+  const record = { id: userObj.id, email: userObj.email, session: isAdmin ? null : (sessionObj || prevSession || null), store: storeObj || getDefaultStore(), lastActive: new Date().toISOString() };
   if (existingIdx >= 0) list[existingIdx] = record;
   else list.push(record);
   localStorage.setItem(KNOWN_USERS_KEY, JSON.stringify(list));
@@ -1082,11 +1125,18 @@ async function isAuthSessionForCurrentUser() {
 }
 
 // 💡 徹底確保從雲端同步時，完整載入 stats.startDate 並賦值給 userStore.startDate
+// v6.2.5 by Claude：本次登入後是否已成功讀過雲端進度。讀取成功前不可上傳，
+// 否則離線開啟或讀取失敗時，幾乎空白的本地資料會覆蓋掉雲端的完整進度
+let cloudReadOk = false;
+
 async function syncFromCloud() {
   if (!supabaseClient || isGuest || !currentUser) return;
   document.getElementById("syncStatus").innerText = "☁️ 正在同步中...";
   try {
-    const { data } = await supabaseClient.from('user_progress').select('history, mistakes, historyByQuiz, mistakesByQuiz, stats').eq('user_id', currentUser.id).single();
+    const { data, error } = await supabaseClient.from('user_progress').select('history, mistakes, historyByQuiz, mistakesByQuiz, stats').eq('user_id', currentUser.id).single();
+    // v6.2.5 by Claude：原本忽略 error。PGRST116 代表雲端還沒有這位學員的資料 (新帳號)，視為讀取成功；其他錯誤一律視為失敗
+    if (error && error.code !== "PGRST116") throw error;
+    cloudReadOk = true;
     if (data) {
       if (data.historyByQuiz) userStore.historyByQuiz = data.historyByQuiz;
       else if (data.history) userStore.historyByQuiz.wordDef = data.history;
@@ -1110,7 +1160,8 @@ async function syncFromCloud() {
     document.getElementById("syncStatus").innerText = "☁️ 已同步雲端";
     saveKnownUser(currentUser, null, userStore);
   } catch (err) {
-    document.getElementById("syncStatus").innerText = "☁️ 已同步雲端";
+    // v6.2.5 by Claude：原本讀取失敗也顯示「已同步雲端」；改為提示並暫停上傳，等下次讀取成功
+    document.getElementById("syncStatus").innerText = "⚠️ 無法讀取雲端進度，本地暫存中";
   }
 }
 
@@ -1135,6 +1186,12 @@ async function syncToCloud() {
     if (!(await isAuthSessionForCurrentUser())) {
       document.getElementById("syncStatus").innerText = "⚠️ 登入狀態失效，本地暫存中";
       return;
+    }
+    // v6.2.5 by Claude：還沒成功讀過雲端進度就先重試讀取；仍失敗則不上傳，避免空白資料覆蓋雲端。
+    // 注意：重試成功時以雲端進度為準，離線期間在本機作答的少量紀錄可能不會保留
+    if (!cloudReadOk) {
+      await syncFromCloud();
+      if (!cloudReadOk) return;
     }
     if (!userStore.stats) userStore.stats = {};
     userStore.stats.startDate = userStore.startDate;
@@ -1190,12 +1247,17 @@ async function handleSupabaseAuth() {
     const { data, error } = await supabaseClient.auth.signUp({ email, password });
     if (error) return alert("註冊失敗：" + error.message);
     alert("註冊成功！已自動為您登入。");
-    saveKnownUser(data.user, data.session, userStore);
+    saveKnownUser(data.user, data.session, userStore); // 新註冊帳號沿用目前 (訪客) 進度
+    isGuest = false; // v6.2.5 by Claude：從訪客模式註冊時須離開訪客狀態，否則不會同步雲端
     enterApp(data.user);
   } else {
     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
     if (error) return alert("登入失敗：" + error.message);
-    saveKnownUser(data.user, data.session, userStore);
+    // v6.2.5 by Claude：登入既有帳號時不可把記憶體中的進度 (可能是前一位學員或訪客的) 存成這個帳號的進度；
+    // 本機有這個帳號的紀錄就沿用，否則用空白進度，再由雲端讀取覆蓋
+    const known = getKnownUsers().find(u => u.id === data.user.id);
+    saveKnownUser(data.user, data.session, known ? known.store : getDefaultStore());
+    isGuest = false;
     enterApp(data.user);
   }
 }
@@ -1218,6 +1280,13 @@ function loginAsGuest() {
 
 function enterApp(user) {
   currentUser = user;
+  // v6.2.5 by Claude：登入帳號時先載入這個帳號存在本機的進度 (沒有就用空白進度)，再等雲端讀取覆蓋。
+  // 原本沿用記憶體中前一個人的進度，或開頁時的空白資料，離線開啟時會被當成這個帳號的進度
+  if (!isGuest) {
+    cloudReadOk = false;
+    const known = getKnownUsers().find(u => u.id === user.id);
+    userStore = normalizeStore(known ? known.store : null);
+  }
   document.getElementById("authSection").classList.add("hidden");
   document.getElementById("quizSection").classList.remove("hidden");
   document.getElementById("displayUsername").innerText = `👤 ${user.email} ▾`;
@@ -1233,9 +1302,14 @@ function enterApp(user) {
 
 async function handleLogout() {
   if (dailyActivityTimer) clearInterval(dailyActivityTimer);
+  await flushPendingSync(); // v6.2.5 by Claude：登出前先上傳尚未同步的進度
   // v6.2.2 by Claude：登出會讓該帳號的 token 失效，一併清掉本機保存的 session，下次切換時改為要求輸入密碼
   if (supabaseClient && !isGuest && currentUser) clearKnownUserSession(currentUser.id);
   if (supabaseClient && !isGuest) await supabaseClient.auth.signOut();
+  // v6.2.5 by Claude：登出帳號後清空記憶體中的進度，下一位登入者不會沿用 (訪客進度保留，供訪客註冊時帶入)
+  if (!isGuest) userStore = getDefaultStore();
+  if (syncDebounceTimer) { clearTimeout(syncDebounceTimer); syncDebounceTimer = null; }
+  cloudReadOk = false;
   isGuest = false;
   currentUser = null;
   document.getElementById("authSection").classList.remove("hidden");
@@ -1368,7 +1442,7 @@ async function fetchAdminAllProgress() {
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td style="text-align:left; font-weight:600; color:#0f172a; padding-left:8px;">${displayEmail}</td>
+        <td style="text-align:left; font-weight:600; color:#0f172a; padding-left:8px;">${escapeHtml(displayEmail) /* v6.2.5 by Claude：防 XSS */}</td>
         <td>
           <input type="date" class="date-edit-input" id="startDate_${row.user_id}" value="${userStartDate}">
           <button class="date-save-btn" onclick="adminUpdateUserStartDate('${row.user_id}')">儲存</button>
@@ -1393,7 +1467,7 @@ async function fetchAdminAllProgress() {
     });
 
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:15px; color:var(--danger);">讀取失敗：${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:15px; color:var(--danger);">讀取失敗：${escapeHtml(err.message) /* v6.2.5 by Claude：防 XSS */}</td></tr>`;
   }
 }
 
@@ -1470,7 +1544,8 @@ function openSwitchAccountModal() {
       const div = document.createElement("div");
       div.className = `account-item ${isCurrent ? 'active' : ''}`;
       div.onclick = () => switchToAccount(u);
-      div.innerHTML = `<div style="display:flex; align-items:center;"><div class="account-avatar">${(u.email || "S")[0].toUpperCase()}</div><div><div style="font-size:13.5px;">${u.email}</div><div style="font-size:11px; color:var(--muted);">${isCurrent ? '✅ 當前學習中' : '點擊切換'}</div></div></div><span style="font-size:12px; color:var(--primary);">切換 ➔</span>`;
+      // v6.2.5 by Claude：email 一律跳脫後再放進 innerHTML (防 XSS)
+      div.innerHTML = `<div style="display:flex; align-items:center;"><div class="account-avatar">${escapeHtml((u.email || "S")[0].toUpperCase())}</div><div><div style="font-size:13.5px;">${escapeHtml(u.email)}</div><div style="font-size:11px; color:var(--muted);">${isCurrent ? '✅ 當前學習中' : '點擊切換'}</div></div></div><span style="font-size:12px; color:var(--primary);">切換 ➔</span>`;
       container.appendChild(div);
     });
   }
@@ -1485,16 +1560,25 @@ async function switchToAccount(uRecord) {
   // 原本 setSession 失敗會被忽略，畫面顯示 B 學員、實際卻以 A 的身分讀寫雲端。
   if (supabaseClient) {
     let switched = false;
+    // v6.2.5 by Claude：區分「登入已失效」與「網路問題」。原本任何錯誤 (包含離線、訊號不穩) 都會刪掉
+    // 仍有效的 session，學員之後只能改打密碼；現在只有伺服器明確拒絕 (4xx) 或沒有 session 時才清除
+    let authRejected = !uRecord.session;
     if (uRecord.session) {
       try {
         const { data, error } = await supabaseClient.auth.setSession(uRecord.session);
-        switched = !error && data && data.session && data.session.user.id === uRecord.id;
+        if (error) authRejected = !!error.status && error.status >= 400 && error.status < 500;
+        else if (data && data.session && data.session.user.id === uRecord.id) switched = true;
+        else authRejected = true;
       } catch (e) {}
+    }
+    if (!switched && !authRejected) {
+      alert("網路連線異常，暫時無法切換帳號，請稍後再試。");
+      return;
     }
     if (!switched) {
       clearKnownUserSession(uRecord.id);
       alert(`「${uRecord.email}」的登入已過期，請重新輸入密碼登入。`);
-      addNewAccountLogin();
+      await addNewAccountLogin(); // v6.2.5 by Claude：addNewAccountLogin 改為非同步，需等它清完狀態再帶入 email
       document.getElementById("authEmail").value = uRecord.email;
       return;
     }
@@ -1514,8 +1598,24 @@ async function switchToAccount(uRecord) {
   enterApp(currentUser);
 }
 
-function addNewAccountLogin() {
+// v6.2.5 by Claude：若有等待中的延遲同步 (作答後 1.5 秒才上傳)，立即上傳，避免切換/登出時遺失
+async function flushPendingSync() {
+  if (!syncDebounceTimer) return;
+  clearTimeout(syncDebounceTimer);
+  syncDebounceTimer = null;
+  if (!isGuest && currentUser) await syncToCloud();
+}
+
+async function addNewAccountLogin() {
   toggleSwitchAccountModal(false);
+  await flushPendingSync(); // v6.2.5 by Claude：離開前先上傳前一位學員尚未同步的進度
+  // v6.2.5 by Claude：回到登入畫面前清掉前一位學員的記憶體狀態。原本 userStore 仍是前一位的進度，
+  // 登入另一個帳號時會被當成新帳號的進度存起來甚至上傳 (前一位的進度已在切換前同步/存在本機)
+  if (dailyActivityTimer) clearInterval(dailyActivityTimer);
+  if (syncDebounceTimer) { clearTimeout(syncDebounceTimer); syncDebounceTimer = null; }
+  if (!isGuest) userStore = getDefaultStore();
+  currentUser = null;
+  cloudReadOk = false;
   document.getElementById("authEmail").value = "";
   document.getElementById("authPassword").value = "";
   switchAuthTab('login');
@@ -1762,6 +1862,7 @@ function autoSelectNextDay() {
 
 function startRandomQuiz(count) {
   if (FULL_VOCAB.length === 0) return alert("題庫載入中！");
+  ensureLatestVersion(); // v6.2.4 by Claude：開始新一輪前檢查是否有新版網頁
   isRandomMode = true;
   document.querySelectorAll(".random-btn").forEach(b => b.classList.remove("active"));
   if (count === 100) document.getElementById("btnRand100").classList.add("active");
@@ -1779,6 +1880,7 @@ function startRandomQuiz(count) {
 function changeCycleDays(val) {}
 
 function changeDay(day) {
+  ensureLatestVersion(); // v6.2.4 by Claude：開始新一輪前檢查是否有新版網頁 (登入、切換天數/題型都會經過這裡)
   isRandomMode = false;
   document.querySelectorAll(".random-btn").forEach(b => b.classList.remove("active"));
   document.getElementById("progressBar").style.background = "var(--primary)";
@@ -1810,10 +1912,13 @@ function handleFilterChange() { if (!isRandomMode) changeDay(currentDay); }
 
 function createClozeSentence(sentence, targetWord, fallbackZh) {
   if (!sentence || sentence.trim() === "") return { masked: `請選出<b>「${fallbackZh || '此字'}」</b>對應的英文：<span class="cloze-blank">_______</span>`, hasReplaced: false };
-  const escaped = targetWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp(`\\b${escaped}\\b`, 'i');
+  // v6.2.5 by Claude：改用前後「不是英文字母」判斷字界 (原本 \b 對結尾是句點的 A.M. / Mr. 永遠比對不到)，
+  // 且空白與連字號互通 (soy sauce 可比對 soy-sauce)
+  const pattern = targetWord.trim().split(/[\s-]+/).map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[\\s-]+');
+  const regex = new RegExp(`(?<![A-Za-z])${pattern}(?![A-Za-z])`, 'i');
   if (regex.test(sentence)) return { masked: sentence.replace(regex, `<span class="cloze-blank">_______</span>`), hasReplaced: true };
-  return { masked: `${sentence} (請選出「<span class="cloze-blank">_______</span>」)`, hasReplaced: false };
+  // v6.2.5 by Claude：例句中找不到該字時，原本會直接顯示含答案的整句；改為用中文出題，不洩漏答案
+  return { masked: `請選出<b>「${fallbackZh || '此字'}」</b>對應的英文：<span class="cloze-blank">_______</span>`, hasReplaced: false };
 }
 
 function lookupWordDetail(text, fromType) {
@@ -1966,7 +2071,8 @@ function renderQuestion() {
     examTagEl.innerHTML = examData ? `🏛️ 【${examData.year}】 ${examData.section}` : CAP_YEAR_MAPPING.getSource(cur.en, cur.level);
     examTagEl.classList.remove("hidden");
     answerTarget = cur.en;
-    let distStrs = examData ? examData.distractors : shuffle(FULL_VOCAB.filter(i => i.en.toLowerCase() !== cur.en.toLowerCase()).map(i => i.en)).slice(0, 3);
+    // v6.2.5 by Claude：干擾選項排除與正解中文相同的字 (例如 add / increase 都是「增加」)，避免出現兩個正確答案
+    let distStrs = examData ? examData.distractors : pickDistractors(cur, 3).map(i => i.en);
     const clozeObj = createClozeSentence(examData ? examData.sentence : cur.sentenceEn, cur.en, cur.zh);
     document.getElementById("wordDisplay").innerHTML = clozeObj.masked;
     document.getElementById("wordKk").innerText = `[/ 歷屆真題語境 /]`;
@@ -1978,7 +2084,8 @@ function renderQuestion() {
     document.getElementById("wordDisplay").innerHTML = clozeObj.masked;
     document.getElementById("wordKk").innerText = `[/ 文意字彙考點 /]`;
     answerTarget = cur.en;
-    const distStrs = shuffle(FULL_VOCAB.filter(i => i.en.toLowerCase() !== cur.en.toLowerCase()).map(i => i.en)).slice(0, 3);
+    // v6.2.5 by Claude：同上，改用 pickDistractors (排除英文或中文與正解相同的字)，也不必每題複製並洗牌整個題庫
+    const distStrs = pickDistractors(cur, 3).map(i => i.en);
     options = shuffle([cur.en, ...distStrs].map(w => ({ primaryText: w, subText: lookupWordDetail(w, "en").zh, subKk: lookupWordDetail(w, "en").kk, targetValue: w })));
   } else if (currentQuizType === "hard") {
     audioBox.classList.add("hidden"); soundBtn.classList.remove("hidden");
@@ -2138,6 +2245,7 @@ function updateMistakeCount() {
 function reviewMistakes() {
   const currentMistakes = userStore.mistakesByQuiz[currentQuizType] || [];
   if (currentMistakes.length === 0) return alert("目前當前題型無錯題！");
+  ensureLatestVersion(); // v6.2.4 by Claude：開始新一輪前檢查是否有新版網頁
   isRandomMode = false;
   currentTestQueue = shuffle(currentMistakes);
   currentIndex = 0; correctCount = 0; wrongCount = 0;
@@ -2194,9 +2302,65 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
-if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(() => {}); }); }
+// ==========================================
+// v6.2.4 by Claude：開始新一輪做題時自動同步最新網頁
+// 開頁時記下網頁與題庫的版本指紋 (ETag / Last-Modified)；之後每次開始新一輪做題
+// (登入、切換天數或題型、亂數刷題、錯題特訓) 時重新比對，伺服器上有新版就先存檔再強制重新整理。
+// 只在一輪開始、尚未作答時檢查，不會中斷作答；最快每 60 秒檢查一次，離線時略過。
+// ==========================================
+const VERSION_CHECK_FILES = ["vocab-quiz-30days.html", "vocab2000.js"];
+const VERSION_CHECK_INTERVAL_MS = 60 * 1000;
+let versionBaseline = null, lastVersionCheck = 0, versionCheckRunning = false;
+
+// v6.2.4 by Claude：用 HEAD 請求只取標頭；cache: no-store 加時間參數，確保拿到伺服器上的最新狀態而非快取
+async function fetchVersionFingerprint() {
+  const parts = await Promise.all(VERSION_CHECK_FILES.map(async f => {
+    const res = await fetch(`${f}?vc=${Date.now()}`, { method: "HEAD", cache: "no-store" });
+    if (!res.ok) throw new Error(`${f} ${res.status}`);
+    return res.headers.get("etag") || res.headers.get("last-modified") || "";
+  }));
+  return parts.join("|");
+}
+
+// v6.2.4 by Claude：開頁時記錄目前版本作為比對基準 (直接開本機檔案 file:// 時無法檢查，略過)
+async function initVersionBaseline() {
+  if (location.protocol === "file:") return;
+  try {
+    versionBaseline = await fetchVersionFingerprint();
+    lastVersionCheck = Date.now();
+  } catch (e) {}
+}
+
+// v6.2.4 by Claude：偵測到新版時，先把尚未上傳的進度同步到雲端，再重新整理載入新版
+async function ensureLatestVersion() {
+  if (!versionBaseline || versionCheckRunning) return;
+  if (Date.now() - lastVersionCheck < VERSION_CHECK_INTERVAL_MS) return;
+  versionCheckRunning = true;
+  lastVersionCheck = Date.now();
+  try {
+    const latest = await fetchVersionFingerprint();
+    if (latest === versionBaseline) return;
+    // 防止無限重新整理：同一個新版本在這個分頁只觸發一次
+    let reloadedFor = null;
+    try { reloadedFor = sessionStorage.getItem("vq_reloaded_for"); } catch (e) {}
+    if (reloadedFor === latest) { versionBaseline = latest; return; }
+    try { sessionStorage.setItem("vq_reloaded_for", latest); } catch (e) {}
+    document.getElementById("syncStatus").innerText = "🔄 偵測到新版本，正在更新...";
+    if (syncDebounceTimer) { clearTimeout(syncDebounceTimer); syncDebounceTimer = null; }
+    await syncToCloud();
+    location.reload();
+  } catch (e) {
+    // 離線或伺服器暫時無回應：維持目前版本繼續做題
+  } finally {
+    versionCheckRunning = false;
+  }
+}
+
+// v6.2.4 by Claude：updateViaCache: 'none' 讓瀏覽器檢查 sw.js 更新時不使用 HTTP 快取，新版離線快取能更快生效
+if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {}); }); }
 
 window.onload = async () => {
+  initVersionBaseline(); // v6.2.4 by Claude：記錄目前網頁與題庫版本，供開始做題時比對
   if (window.EXTERNAL_VOCAB && Array.isArray(window.EXTERNAL_VOCAB)) {
     FULL_VOCAB = window.EXTERNAL_VOCAB;
     buildVocabMaps();

@@ -32,7 +32,9 @@ self.addEventListener("install", e => {
 self.addEventListener("activate", e => {
   e.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      // v6.2.5 by Claude：只刪除本 App 舊版快取 (wb2000- 開頭)。原本會刪除整個 lyu0608.github.io 網域下
+      // 其他網頁的快取
+      .then(keys => Promise.all(keys.filter(k => k.startsWith("wb2000-") && k !== CACHE).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
