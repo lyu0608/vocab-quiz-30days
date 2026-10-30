@@ -1,5 +1,0 @@
-2026/10/30-10:57:02.828 1db8 Creating DB C:\@Personal\BeeStation01\Personal\Education\tools\profile-selftest\Default\EdgeCoupons/coupons_data.db since it was missing.
-2026/10/30-10:57:02.877 1db8 Reusing MANIFEST C:\@Personal\BeeStation01\Personal\Education\tools\profile-selftest\Default\EdgeCoupons/coupons_data.db/MANIFEST-000001
-2026/10/30-10:57:03.185 a8b0 Level-0 table #5: started
-2026/10/30-10:57:03.192 a8b0 Level-0 table #5: 683273 bytes OK
-2026/10/30-10:57:03.194 a8b0 Delete type=0 #3

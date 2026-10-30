@@ -12,7 +12,8 @@ const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok: !!ok, detail }); console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? "  -- " + detail : ""}`); };
 
 (async () => {
-  const profile = path.join(__dirname, "profile-selftest");
+  // v6.2.6 by Claude：測試用瀏覽器設定檔改放系統暫存資料夾，原本放在 tools/ 底下會被 git 一起提交
+  const profile = path.join(require("os").tmpdir(), "vocab-selftest-profile");
   fs.rmSync(profile, { recursive: true, force: true });
   const browser = await puppeteer.launch({
     executablePath: "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",

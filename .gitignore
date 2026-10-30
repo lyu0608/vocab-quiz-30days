@@ -11,3 +11,5 @@
 # 工具產生的暫存
 __pycache__/
 node_modules/
+# v6.2.6 by Claude：自動化測試用的瀏覽器設定檔 (舊版 selftest.js 會建立在 tools/ 底下)
+tools/profile-*/
