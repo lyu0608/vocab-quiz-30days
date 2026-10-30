@@ -248,6 +248,65 @@ const check = (name, ok, detail = "") => { results.push({ name, ok: !!ok, detail
   check("T8d 雲端寫入失敗時不顯示已同步", t8.upsertErrorShown);
   check("T8e 後台更新 0 筆時顯示失敗", !!adminAlert, adminAlert || dialogs.join(" | "));
 
+  // T14 (v6.2.7) real user_progress schema: unknown columns are rejected like PostgREST does
+  const t14 = await page.evaluate(async () => {
+    const COLS = ["user_id", "email", "history", "mistakes", "stats", "startdate", "updated_at"];
+    const realFrom = supabaseClient.from.bind(supabaseClient), realAuth = supabaseClient.auth;
+    const user = { id: "s-1", email: "s1@test.local" };
+    // cloud row in the OLD format: history = { Day_N }, mistakes = [], start date set by admin
+    let cloudRow = { user_id: "s-1", email: user.email, history: { Day_1: { score: 80, total: 83, quizType: "wordDef" } }, mistakes: [{ en: "cable", zh: "電纜" }], stats: { totalQ: 83, totalCorrect: 80, startDate: "2026-10-23", wordDef: { total: 83, correct: 80 } } };
+    let lastUpsert = null, badColumn = null;
+    supabaseClient.auth = { ...realAuth, getSession: async () => ({ data: { session: { user } } }) };
+    supabaseClient.from = () => ({
+      select: (sel) => ({ eq: () => ({ single: async () => {
+        const bad = sel.split(",").map(s => s.trim()).find(c => !COLS.includes(c));
+        if (bad) { badColumn = bad; return { data: null, error: { code: "42703", message: `column user_progress.${bad} does not exist` } }; }
+        return { data: cloudRow, error: null };
+      } }) }),
+      upsert: async (payload) => {
+        const bad = Object.keys(payload).find(c => !COLS.includes(c));
+        if (bad) { badColumn = bad; return { error: { code: "PGRST204", message: `Could not find the '${bad}' column` } }; }
+        lastUpsert = payload; cloudRow = { ...cloudRow, ...payload }; return { error: null };
+      },
+    });
+    // local (never-uploaded) progress on this device: wordDef Day_2 and hard Day_1
+    const local = getDefaultStore();
+    local.historyByQuiz.wordDef = { Day_2: { score: 90, total: 83, quizType: "wordDef" } };
+    local.historyByQuiz.hard = { Day_1: { score: 1, total: 1, quizType: "hard" } };
+    local.stats.totalQ = 100; local.stats.wordDef = { total: 97, correct: 90 };
+    saveKnownUser(user, null, local);
+    isGuest = false;
+    enterApp(user);
+    await new Promise(r => setTimeout(r, 400));
+    setQuizType("wordDef");
+    const out = {
+      readOk: cloudReadOk,
+      startDate: userStore.startDate,
+      day1Label: document.getElementById("daySelect").options[0].text,
+      wordDefDays: Object.keys(userStore.historyByQuiz.wordDef).sort(),
+      hardDays: Object.keys(userStore.historyByQuiz.hard),
+      mistakes: userStore.mistakesByQuiz.wordDef.map(m => m.en),
+      totalQ: userStore.stats.totalQ,
+    };
+    await syncToCloud();
+    out.uploaded = !!lastUpsert && !!lastUpsert.history && "hard" in lastUpsert.history;
+    out.badColumn = badColumn;
+    out.status = document.getElementById("syncStatus").innerText;
+    // reload-equivalent: fresh store, read back what was uploaded
+    saveKnownUser(user, null, getDefaultStore());
+    enterApp(user);
+    await new Promise(r => setTimeout(r, 400));
+    out.afterReload = { startDate: userStore.startDate, wordDefDays: Object.keys(userStore.historyByQuiz.wordDef).sort(), hardDays: Object.keys(userStore.historyByQuiz.hard) };
+    // admin view reads the new-format column correctly
+    out.adminHist = Object.keys(readHistoryColumn(cloudRow.history).hard);
+    supabaseClient.from = realFrom; supabaseClient.auth = realAuth;
+    return out;
+  });
+  check("T14a 雲端讀取只用存在的欄位且成功", t14.readOk && !t14.badColumn, JSON.stringify({ readOk: t14.readOk, bad: t14.badColumn }));
+  check("T14b 重新整理後啟動日為後台設定的 10/23", t14.startDate === "2026-10-23" && t14.day1Label.includes("2026-10-23") && t14.afterReload.startDate === "2026-10-23", t14.day1Label);
+  check("T14c 雲端舊格式與本機紀錄合併不遺失", JSON.stringify(t14.wordDefDays) === '["Day_1","Day_2"]' && t14.hardDays.includes("Day_1") && t14.mistakes.includes("cable") && t14.totalQ === 100, JSON.stringify(t14));
+  check("T14d 上傳成功且重新整理後讀回五大題型紀錄", t14.uploaded && t14.status.includes("已同步") && JSON.stringify(t14.afterReload.wordDefDays) === '["Day_1","Day_2"]' && t14.afterReload.hardDays.includes("Day_1") && t14.adminHist.includes("Day_1"), JSON.stringify({ up: t14.uploaded, st: t14.status, ar: t14.afterReload }));
+
   // T9 service worker + offline
   await page.reload({ waitUntil: "networkidle0" });
   await page.evaluate(() => navigator.serviceWorker.ready);

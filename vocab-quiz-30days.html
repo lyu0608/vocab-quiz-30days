@@ -808,6 +808,17 @@
     </div>
     <div class="modal-body">
       <div class="history-item">
+        <div class="history-tag">v6.2.7 by Claude - 修正作答進度無法存到雲端</div>
+        <div class="history-desc">
+          <ul>
+            <li><b>根本原因：</b>程式讀寫資料庫中不存在的 `historyByQuiz` / `mistakesByQuiz` 欄位，雲端讀取與上傳一律失敗：重新整理後啟動日變回今天、學習紀錄空白，作答進度也從未真正存到雲端。</li>
+            <li><b>修正：</b>五大題型的紀錄與錯題改存於既有的 `history` / `mistakes` 欄位，並相容舊格式資料；後台改用同一套讀取方式。</li>
+            <li><b>保護既有進度：</b>首次成功讀取雲端時，與本機紀錄合併 (紀錄與錯題取聯集、統計取較大值、啟動日以雲端為準)，不會用雲端舊資料覆蓋本機較新的作答。</li>
+            <li><b>清空紀錄：</b>改寫入正確欄位並檢查是否成功。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="history-item">
         <div class="history-tag">v6.2.6 by Claude - 資料庫限制 email 只能寫自己的</div>
         <div class="history-desc">
           <ul>
@@ -1138,27 +1149,76 @@ async function isAuthSessionForCurrentUser() {
 // 否則離線開啟或讀取失敗時，幾乎空白的本地資料會覆蓋掉雲端的完整進度
 let cloudReadOk = false;
 
+// ==========================================
+// v6.2.7 by Claude：雲端欄位對應修正
+// 資料庫 user_progress 只有 history / mistakes / stats 欄位，沒有 historyByQuiz / mistakesByQuiz。
+// 原程式讀寫這兩個不存在的欄位，讀取一律失敗 (重新整理後啟動日變回今天、歷史紀錄空白)，
+// 上傳也一律被拒 (作答進度從未真正存到雲端)。改為把五大題型資料存在既有的 history / mistakes 欄位，
+// 並相容舊格式：history 為 { Day_1: … } (只有單字題型)、mistakes 為陣列。
+// ==========================================
+const QUIZ_TYPES = ["wordDef", "hard", "cloze", "exam", "listen"];
+
+// v6.2.7 by Claude：把雲端 history 欄位轉成五大題型格式 (新格式以題型為 key；舊格式視為單字題型)
+function readHistoryColumn(h) {
+  const out = getDefaultStore().historyByQuiz;
+  if (!h || typeof h !== "object" || Array.isArray(h)) return out;
+  if (QUIZ_TYPES.some(t => t in h)) {
+    QUIZ_TYPES.forEach(t => { if (h[t] && typeof h[t] === "object") out[t] = h[t]; });
+  } else {
+    out.wordDef = h;
+  }
+  return out;
+}
+
+// v6.2.7 by Claude：把雲端 mistakes 欄位轉成五大題型格式 (舊格式為陣列，視為單字題型)
+function readMistakesColumn(m) {
+  const out = getDefaultStore().mistakesByQuiz;
+  if (Array.isArray(m)) { out.wordDef = m; return out; }
+  if (m && typeof m === "object") QUIZ_TYPES.forEach(t => { if (Array.isArray(m[t])) out[t] = m[t]; });
+  return out;
+}
+
+// v6.2.7 by Claude：合併雲端與本機進度，不以雲端直接覆蓋。因先前上傳一律失敗，
+// 各裝置本機才有最近的作答紀錄；合併規則：紀錄取聯集 (同一筆以本機為準)、錯題取聯集、
+// 統計數字取較大值、啟動日以雲端為準 (管理者可在後台修改)
+function mergeCloudIntoStore(local, cloudRow) {
+  const merged = normalizeStore(local);
+  const cHist = readHistoryColumn(cloudRow.history);
+  const cMist = readMistakesColumn(cloudRow.mistakes);
+  QUIZ_TYPES.forEach(t => {
+    merged.historyByQuiz[t] = { ...(cHist[t] || {}), ...(merged.historyByQuiz[t] || {}) };
+    const list = (merged.mistakesByQuiz[t] || []).slice();
+    const ids = new Set(list.map(m => m.en || m.scriptEn));
+    (cMist[t] || []).forEach(m => { const id = m.en || m.scriptEn; if (!ids.has(id)) { ids.add(id); list.push(m); } });
+    merged.mistakesByQuiz[t] = list;
+  });
+  const cStats = cloudRow.stats || {};
+  const lStats = merged.stats || {};
+  merged.stats = { ...cStats, ...lStats };
+  merged.stats.totalQ = Math.max(cStats.totalQ || 0, lStats.totalQ || 0);
+  merged.stats.totalCorrect = Math.max(cStats.totalCorrect || 0, lStats.totalCorrect || 0);
+  QUIZ_TYPES.forEach(t => {
+    const c = cStats[t] || {}, l = lStats[t] || {};
+    merged.stats[t] = { total: Math.max(c.total || 0, l.total || 0), correct: Math.max(c.correct || 0, l.correct || 0) };
+  });
+  const startDate = cStats.startDate || cloudRow.startdate || merged.startDate || null;
+  merged.startDate = startDate;
+  merged.stats.startDate = startDate;
+  return merged;
+}
+
 async function syncFromCloud() {
   if (!supabaseClient || isGuest || !currentUser) return;
   document.getElementById("syncStatus").innerText = "☁️ 正在同步中...";
   try {
-    const { data, error } = await supabaseClient.from('user_progress').select('history, mistakes, historyByQuiz, mistakesByQuiz, stats').eq('user_id', currentUser.id).single();
+    // v6.2.7 by Claude：只讀取資料庫實際存在的欄位 (原本含不存在的 historyByQuiz / mistakesByQuiz，整個查詢失敗)
+    const { data, error } = await supabaseClient.from('user_progress').select('history, mistakes, stats, startdate').eq('user_id', currentUser.id).single();
     // v6.2.5 by Claude：原本忽略 error。PGRST116 代表雲端還沒有這位學員的資料 (新帳號)，視為讀取成功；其他錯誤一律視為失敗
     if (error && error.code !== "PGRST116") throw error;
     cloudReadOk = true;
     if (data) {
-      if (data.historyByQuiz) userStore.historyByQuiz = data.historyByQuiz;
-      else if (data.history) userStore.historyByQuiz.wordDef = data.history;
-
-      if (data.mistakesByQuiz) userStore.mistakesByQuiz = data.mistakesByQuiz;
-      else if (data.mistakes) userStore.mistakesByQuiz.wordDef = data.mistakes;
-
-      if (data.stats) {
-        userStore.stats = data.stats;
-        if (data.stats.startDate) {
-          userStore.startDate = data.stats.startDate; // 💡 確保雲端修改的 startDate 被正確同步
-        }
-      }
+      // v6.2.7 by Claude：改為合併雲端與本機進度 (見 mergeCloudIntoStore)；啟動日以雲端為準
+      userStore = mergeCloudIntoStore(userStore, data);
 
       localStorage.setItem("local_vocab_progress", JSON.stringify(userStore));
       updateMistakeCount();
@@ -1205,11 +1265,12 @@ async function syncToCloud() {
     if (!userStore.stats) userStore.stats = {};
     userStore.stats.startDate = userStore.startDate;
 
+    // v6.2.7 by Claude：寫入資料庫實際存在的 history / mistakes 欄位 (原本寫入不存在的欄位，上傳一律被拒)
     const payload = {
       user_id: currentUser.id,
       email: currentUser.email,
-      historyByQuiz: userStore.historyByQuiz,
-      mistakesByQuiz: userStore.mistakesByQuiz,
+      history: userStore.historyByQuiz,
+      mistakes: userStore.mistakesByQuiz,
       stats: userStore.stats,
       updated_at: new Date().toISOString()
     };
@@ -1362,10 +1423,9 @@ async function fetchAdminAllProgress() {
     const localKnownUsers = getKnownUsers();
 
     data.forEach(row => {
-      let historyByQuiz = row.historyByQuiz || {};
-      if (!row.historyByQuiz && row.history) historyByQuiz = { wordDef: row.history };
-
-      const mistakesByQuiz = row.mistakesByQuiz || (row.mistakes ? { wordDef: row.mistakes } : {});
+      // v6.2.7 by Claude：用同一套轉換讀取 history / mistakes 欄位 (相容新舊格式)；資料庫沒有 historyByQuiz / mistakesByQuiz 欄位
+      const historyByQuiz = readHistoryColumn(row.history);
+      const mistakesByQuiz = readMistakesColumn(row.mistakes);
       const cloudStats = row.stats || {};
       const userStartDate = cloudStats.startDate || getTodayDateString();
 
@@ -1667,14 +1727,17 @@ async function executeClearRecords() {
     if (!userStore.stats) userStore.stats = {};
     userStore.stats.startDate = userStore.startDate;
 
-    await supabaseClient.from('user_progress').upsert({
+    // v6.2.7 by Claude：改寫入實際存在的 history / mistakes 欄位，並檢查錯誤 (原本寫入不存在的欄位失敗，卻仍顯示已清空)
+    const { error: clearErr } = await supabaseClient.from('user_progress').upsert({
       user_id: currentUser.id,
       email: currentUser.email,
-      historyByQuiz: userStore.historyByQuiz,
-      mistakesByQuiz: userStore.mistakesByQuiz,
+      history: userStore.historyByQuiz,
+      mistakes: userStore.mistakesByQuiz,
       stats: userStore.stats,
       updated_at: new Date().toISOString()
     });
+    if (clearErr) throw clearErr;
+    cloudReadOk = true; // 雲端已與本機 (清空後) 一致
     updateMistakeCount();
     initDaySelector();
     refreshHistoryDisplay();
