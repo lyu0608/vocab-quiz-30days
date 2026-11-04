@@ -1,4 +1,4 @@
-"""v6.2.9 by Claude：由國中教育會考官方「英語（聽力）」壓縮檔產生聽力真題題庫 cap_listening_bank.js 與壓縮音檔
+"""v6.2.9 by Claude (v6.3.0 擴充到 104–115 年)：由國中教育會考官方「英語（聽力）」壓縮檔產生聽力真題題庫 cap_listening_bank.js 與壓縮音檔
 
 來源：國中教育會考官網 https://cap.rcpet.edu.tw/exam/{年度}/{年度}P_Listening.zip (113 年為 113_Listening.zip)
   壓縮檔內含聽力試題本 {年度}P_Listening.pdf 與每題一個官方音檔「NN 第X題.mp3」
@@ -31,15 +31,16 @@ def parse_booklet(pdf_path):
         text = "\n".join((p.extract_text() or "") for p in pdf.pages)
     items, part = {}, None
     # 依「第X部分」與「第N題」切段；示例題不在「第N題」之內
-    tokens = re.split(r"(第[一二三]部分：\S+|第\s*\d+\s*題)", text)
+    # 104 年題本用半形冒號加空白「第二部分: 基本問答」，其他年度用全形冒號
+    tokens = re.split(r"(第[一二三]部分\s*[：:]\s*[^\s（(]+|第\s*\d+\s*題)", text)
     for i, tok in enumerate(tokens):
-        pm = re.match(r"第[一二三]部分：(\S+?)\s*[（(]", tok + "(") if tok.startswith("第") and "部分" in tok else None
+        pm = re.match(r"第[一二三]部分\s*[：:]\s*([^\s（(]+)$", tok)
         if pm:
-            part = re.sub(r"[（(].*", "", tok.split("：", 1)[1]); continue
+            part = pm.group(1); continue
         qm = re.match(r"第\s*(\d+)\s*題$", tok)
         if qm and i + 1 < len(tokens):
             body = clean(tokens[i + 1])
-            om = re.search(r"\(A\)\s*(.*?)\s*\(B\)\s*(.*?)\s*\(C\)\s*(.*?)(?:\s+\d+)?(?:\s*試題結束|\s*聽力試題播音完畢|$)", body)
+            om = re.search(r"\(A\)\s*(.*?)\s*\(B\)\s*(.*?)\s*\(C\)\s*(.*?)(?:\s+\d+)?(?:\s*試題結束|\s*聽力試題播音(?:完畢|結束)|$)", body)
             items[int(qm.group(1))] = {"part": part, "options": [clean(o) for o in om.groups()] if om else None}
     return items
 

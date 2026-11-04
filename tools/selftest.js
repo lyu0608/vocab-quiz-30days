@@ -339,8 +339,19 @@ const check = (name, ok, detail = "") => { results.push({ name, ok: !!ok, detail
     return { total: bank.length, bad, planTotal: plan.reduce((a, b) => a + b, 0), planMin: Math.min(...plan), planMax: Math.max(...plan),
              mistakeIsCap: (userStore.mistakesByQuiz.exam || []).every(m => m.isCap) };
   });
-  check(`T15a 官方真題 ${t15.total} 題：出處、空格、官方選項順序、官方答案判定全部正確`, t15.total >= 100 && t15.bad.length === 0, t15.bad.slice(0, 6).join(" ; "));
-  check("T15b 真題平均分配到 30 天 (每天 3–4 題) 且錯題本只記官方真題", t15.planTotal === t15.total && t15.planMin >= 3 && t15.planMax <= 4 && t15.mistakeIsCap, JSON.stringify({ planTotal: t15.planTotal, min: t15.planMin, max: t15.planMax }));
+  check(`T15a 官方真題 ${t15.total} 題：出處、空格、官方選項順序、官方答案判定全部正確`, t15.total >= 190 && t15.bad.length === 0, t15.bad.slice(0, 6).join(" ; "));
+  // v6.3.0: 104–115 years, original 108–113 items stay on their days, new years appended (5–7 per day)
+  check("T15b 真題平均分配到 30 天 (每天 5–7 題) 且錯題本只記官方真題", t15.planTotal === t15.total && t15.planMin >= 5 && t15.planMax <= 7 && t15.mistakeIsCap, JSON.stringify({ planTotal: t15.planTotal, min: t15.planMin, max: t15.planMax }));
+  // T15c (v6.3.0) original exam/listening items are still on the same day as v6.2.9 (the first items of each day)
+  const t15c = await page.evaluate(() => {
+    const same = (plans, items, years) => {
+      const orig = splitIntoDays(items.filter(q => years.includes(q.year)));
+      return Object.keys(orig).every(d => JSON.stringify(plans[d].slice(0, orig[d].length).map(q => q.id)) === JSON.stringify(orig[d].map(q => q.id)));
+    };
+    return { exam: same(examDayPlans, buildExamItems(), EXAM_V1_YEARS), listen: same(listenDayPlans, buildListenItems(), LISTEN_V1_YEARS),
+             day1Exam: examDayPlans[1].slice(0, 4).map(q => q.id).join(","), day1Listen: listenDayPlans[1].slice(0, 3).map(q => q.id).join(",") };
+  });
+  check("T15c 原有真題、聽力題仍在原來的天數", t15c.exam && t15c.listen && t15c.day1Exam === "113-02,113-03,113-04,113-05" && t15c.day1Listen === "113-L04,113-L05,113-L06", JSON.stringify(t15c));
 
   // T16 (v6.2.8) wordDef / hard / cloze: no distractor shares any meaning with the answer, across the whole word list
   const t16 = await page.evaluate(() => {
@@ -396,8 +407,8 @@ const check = (name, ok, detail = "") => { results.push({ name, ok: !!ok, detail
     return { total: bank.length, bad, planTotal: plan.reduce((a, b) => a + b, 0), planMin: Math.min(...plan), planMax: Math.max(...plan),
              mistakesOk: mistakes.length === bank.length && mistakes.every(m => m.isCapListen && m.audio), reviewOk: currentTestQueue.length === bank.length && !!currentListeningItem() };
   });
-  check(`T17a 官方聽力 ${t17.total} 題：出處、官方選項順序、官方答案判定、官方錄音可下載`, t17.total >= 60 && t17.bad.length === 0, t17.bad.slice(0, 6).join(" ; "));
-  check("T17b 聽力平均分配到 30 天，錯題本記錄官方聽力題且可錯題特訓", t17.planTotal === t17.total && t17.planMin >= 2 && t17.planMax <= 3 && t17.mistakesOk && t17.reviewOk, JSON.stringify({ planTotal: t17.planTotal, min: t17.planMin, max: t17.planMax, m: t17.mistakesOk, r: t17.reviewOk }));
+  check(`T17a 官方聽力 ${t17.total} 題：出處、官方選項順序、官方答案判定、官方錄音可下載`, t17.total >= 190 && t17.bad.length === 0, t17.bad.slice(0, 6).join(" ; "));
+  check("T17b 聽力平均分配到 30 天，錯題本記錄官方聽力題且可錯題特訓", t17.planTotal === t17.total && t17.planMin >= 6 && t17.planMax <= 8 && t17.mistakesOk && t17.reviewOk, JSON.stringify({ planTotal: t17.planTotal, min: t17.planMin, max: t17.planMax, m: t17.mistakesOk, r: t17.reviewOk }));
   // T9 service worker + offline
   await page.reload({ waitUntil: "networkidle0" });
   await page.evaluate(() => navigator.serviceWorker.ready);

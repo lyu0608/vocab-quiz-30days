@@ -814,6 +814,17 @@
     </div>
     <div class="modal-body">
       <div class="history-item">
+        <div class="history-tag">v6.3.0 by Claude - 真題、聽力官方題目增加</div>
+        <div class="history-desc">
+          <ul>
+            <li><b>真題增加：</b>閱讀「單題」官方原題由 108–113 年 102 題擴充為 104–115 年共 190 題 (新增 104–107、114、115 年 88 題)，每天 5–7 題。103 年試題本為掃描圖檔無法讀取文字，未收錄。</li>
+            <li><b>聽力增加：</b>聽力官方原題由 110–113 年 69 題擴充為 104–108、110–115 年共 194 題 (新增 125 題，含官方錄音)，每天 6–8 題。109 年因疫情停辦英語聽力，無此年度。</li>
+            <li><b>原有進度不受影響：</b>原本每天分配到的題目仍在同一天，新題目平均加在每天原有題目的後面。</li>
+            <li>題幹、選項與答案皆由官方試題本與參考答案自動產生；看圖作答的題目因無法顯示圖片而未收錄。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="history-item">
         <div class="history-tag">v6.2.9 by Claude - 聽力改用官方會考原題與官方錄音</div>
         <div class="history-desc">
           <ul>
@@ -1887,9 +1898,22 @@ function buildExamItems() {
 }
 
 // v6.2.8 by Claude：官方真題依年度 (新到舊)、題號順序平均分配到 30 天，每天 3–4 題，分配固定不變
+// v6.3.0 by Claude：題庫擴充後，原本的題目 (真題 108–113 年、聽力 110–113 年) 仍留在原來的天數，
+// 新增年度的題目另外平均分配到 30 天、接在每天原本題目的後面 → 真題每天 5–7 題、聽力每天 6–8 題
+const EXAM_V1_YEARS = ["113", "112", "111", "110", "109", "108"];
+const LISTEN_V1_YEARS = ["113", "112", "111", "110"];
 function initExamPlans() {
-  examDayPlans = splitIntoDays(buildExamItems());
-  listenDayPlans = splitIntoDays(buildListenItems()); // v6.2.9 by Claude：聽力官方題目，每天 2–3 題
+  examDayPlans = splitKeepingOriginal(buildExamItems(), EXAM_V1_YEARS);
+  listenDayPlans = splitKeepingOriginal(buildListenItems(), LISTEN_V1_YEARS); // v6.2.9 by Claude：聽力官方題目
+}
+
+// v6.3.0 by Claude：原有年度的題目照舊分配，新增年度的題目分開分配後接在後面
+function splitKeepingOriginal(items, originalYears) {
+  const original = splitIntoDays(items.filter(q => originalYears.includes(q.year)));
+  const added = splitIntoDays(items.filter(q => !originalYears.includes(q.year)));
+  const plans = {};
+  for (let d = 1; d <= DAYS_COUNT; d++) plans[d] = original[d].concat(added[d]);
+  return plans;
 }
 
 // v6.2.9 by Claude：聽力改用國中教育會考官方聽力原題 (cap_listening_bank.js)，en 為正確選項文字
