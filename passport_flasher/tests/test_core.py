@@ -305,5 +305,88 @@ class HistoryTests(Tmp):
         self.assertEqual(core.project_version(repo), "v1.2.3 · v1.2.3")
 
 
+class BackupTests(Tmp):
+    def setUp(self):
+        super().setUp()
+        self._orig = core.workspace_dir
+        core.workspace_dir = lambda: self.dir
+
+    def tearDown(self):
+        core.workspace_dir = self._orig
+        super().tearDown()
+
+    def full_flash(self):
+        data = bytearray(b"\xff" * core.FLASH_BYTES)
+        m = merged_image()
+        data[:len(m)] = m
+        return bytes(data)
+
+    def test_finalize_list_restore_delete(self):
+        tmp = core.new_backup_tmp()
+        tmp.write_bytes(self.full_flash())
+        path = core.finalize_backup(tmp, "a0:85:e3:12:34:56", "ESP32-C3", "/dev/cu.x", "手動備份")
+        self.assertFalse(tmp.exists())
+        self.assertIn("a085e3123456", path.name)
+        b = core.list_backups()
+        self.assertEqual(len(b), 1)
+        self.assertTrue(b[0]["bootable"])
+        self.assertEqual(b[0]["partitions"], ["nvs", "phy_init", "factory"])
+        plan = core.plan_restore(path)
+        self.assertEqual([(i.offset, i.size) for i in plan.items], [(0, core.FLASH_BYTES)])
+        self.assertIn("備份當時", plan.summary())
+        core.delete_backup(path)
+        self.assertEqual(core.list_backups(), [])
+
+    def test_incomplete_backup_rejected(self):
+        tmp = core.new_backup_tmp()
+        tmp.write_bytes(b"\xff" * 1000)
+        with self.assertRaisesRegex(FlashError, "不完整"):
+            core.finalize_backup(tmp)
+        self.assertFalse(tmp.exists())
+
+    def test_blank_backup_cannot_restore(self):
+        tmp = core.new_backup_tmp()
+        tmp.write_bytes(b"\xff" * core.FLASH_BYTES)
+        path = core.finalize_backup(tmp)
+        self.assertTrue(core.list_backups()[0]["blank"])
+        with self.assertRaisesRegex(FlashError, "無法開機"):
+            core.plan_restore(path)
+
+    def test_delete_outside_refused(self):
+        f = self.write("other.bin", b"x")
+        with self.assertRaises(FlashError):
+            core.delete_backup(f)
+        self.assertTrue(f.exists())
+
+    def test_read_flash_args_accepted_by_esptool(self):
+        try:
+            import esptool  # noqa: F401
+        except ImportError:
+            self.skipTest("沒有安裝 esptool")
+        r = subprocess.run(core.esptool_cmd(core.read_flash_args("/dev/does-not-exist", 460800, self.dir / "o.bin")),
+                           capture_output=True, text=True, timeout=60)
+        out = r.stdout + r.stderr
+        self.assertNotIn("Usage:", out)
+        self.assertRegex(out, r"(?i)could not open port|no such file|does-not-exist")
+
+    def test_progress_read(self):
+        self.assertEqual(core.parse_progress("Reading from 0x00200000 [=====>    ]  25.0% 2.00MB/8.00MB [00:10]"), 25.0)
+        self.assertEqual(core.parse_progress("1048576 (12 %)"), 12.0)
+
+
+class TutorialTests(unittest.TestCase):
+    def test_sections(self):
+        secs = core.tutorial_sections()
+        titles = [t for t, _ in secs]
+        self.assertGreaterEqual(len(secs), 8)
+        for want in ("連接裝置", "社區", "開源專案", "ESP-IDF", "韌體檔", "上傳紀錄", "備份", "常見問題"):
+            self.assertTrue(any(want in t for t in titles), want)
+        self.assertTrue(all(body.strip() for _, body in secs))
+
+    def test_code_block_not_split(self):
+        secs = core.tutorial_sections("## A\n```\n## not a heading\n```\n## B\nx\n")
+        self.assertEqual([t for t, _ in secs], ["A", "B"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

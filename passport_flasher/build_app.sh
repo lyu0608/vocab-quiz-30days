@@ -14,6 +14,7 @@ rm -rf build dist
   --collect-all esptool \
   --collect-data certifi \
   --add-data "CHANGELOG.md:." \
+  --add-data "TUTORIAL.md:." \
   --hidden-import serial.tools.list_ports \
   --hidden-import PIL.ImageTk \
   app.py

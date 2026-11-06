@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 APP_NAME = "AI Passport 燒錄工具"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.2.0"
 
 # ---------------------------------------------------------------- 硬體常數
 CHIP = "esp32c3"
@@ -198,6 +198,28 @@ def bundled_file(name: str) -> Path:
     return base / name
 
 
+def read_tutorial() -> str:
+    try:
+        return bundled_file("TUTORIAL.md").read_text("utf-8")
+    except OSError:
+        return "# 使用教學\n\n## 找不到教學\n\n教學檔案 TUTORIAL.md 遺失，請重新下載本工具。\n"
+
+
+def tutorial_sections(md: str | None = None) -> list[tuple[str, str]]:
+    """依「## 標題」切成章節：[(標題, 內容)]。"""
+    md = read_tutorial() if md is None else md
+    out: list[tuple[str, str]] = []
+    in_code = False
+    for line in md.splitlines():
+        if line.strip().startswith("```"):
+            in_code = not in_code
+        if not in_code and line.startswith("## "):
+            out.append((line[3:].strip(), ""))
+        elif out:
+            out[-1] = (out[-1][0], out[-1][1] + line + "\n")
+    return [(t, b.strip() + "\n") for t, b in out]
+
+
 def read_changelog() -> str:
     try:
         return bundled_file("CHANGELOG.md").read_text("utf-8")
@@ -309,12 +331,15 @@ class FlashPlan:
     flash_args: list[str]                     # --flash-mode 等（esptool 5 寫法）
     resets_settings: bool                     # 會不會清掉 NVS（Wi-Fi、配網設定）
     notes: list[str] = field(default_factory=list)
+    settings_text: str = ""                   # 自訂「設定會怎樣」的說明（例如還原備份）
 
     def summary(self) -> str:
         lines = [self.title]
         for it in self.items:
             lines.append(f"  0x{it.offset:06X}  {it.path.name}  ({human_size(it.size)})")
-        if self.resets_settings:
+        if self.settings_text:
+            lines.append(self.settings_text)
+        elif self.resets_settings:
             lines.append("⚠️ 會清除裝置上的設定（Wi-Fi／配網／個人資料），和官方社區安裝相同。")
         else:
             lines.append("✓ 保留裝置上的設定（NVS 分區不會被覆寫）。")
@@ -506,6 +531,13 @@ def write_flash_args(port: str, baud: int, plan: FlashPlan) -> list[str]:
     return args
 
 
+def read_flash_args(port: str, baud: int, out: str | Path, size: int = FLASH_BYTES) -> list[str]:
+    """把整片 Flash 讀出來（備份）。"""
+    return ["--chip", CHIP, "--port", port, "--baud", str(baud),
+            "--before", "default-reset", "--after", "hard-reset",
+            "read-flash", "0x0", f"0x{size:X}", str(out)]
+
+
 def chip_id_args(port: str) -> list[str]:
     # 不指定 --chip，讓 esptool 自己偵測，才能告訴使用者接的是什麼
     return ["--port", port, "--before", "default-reset", "--after", "hard-reset", "chip-id"]
@@ -520,7 +552,13 @@ def strip_ansi(s: str) -> str:
     return _ANSI_RE.sub("", s)
 
 
+_V4_READ_RE = re.compile(r"^\s*\d+\s+\((\d{1,3})\s?%\)")
+
+
 def parse_progress(line: str) -> float | None:
+    m = _V4_READ_RE.match(line)  # esptool 4 read_flash：「4096 (0 %)」
+    if m:
+        return float(m.group(1))
     if "Writing at" not in line and "Reading" not in line and "Downloading" not in line:
         return None
     m = _PROGRESS_RE.search(line)
@@ -530,6 +568,88 @@ def parse_progress(line: str) -> float | None:
 def parse_chip(line: str) -> str | None:
     m = _CHIP_RE.search(line)
     return m.group(1).upper() if m else None
+
+
+# ================================================================ 備份
+def backups_dir() -> Path:
+    d = workspace_dir() / "backups"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def new_backup_tmp() -> Path:
+    return backups_dir() / f".reading-{int(time.time() * 1000)}.bin.part"
+
+
+def _mac_slug(mac: str | None) -> str:
+    return (mac or "unknown").replace(":", "").lower()
+
+
+def finalize_backup(tmp: str | Path, mac: str | None = None, chip: str | None = None,
+                    port: str = "", note: str = "") -> Path:
+    """檢查讀出的備份並改成正式檔名，旁邊放一個 .json 說明檔。"""
+    tmp = Path(tmp)
+    if not tmp.exists():
+        raise FlashError("備份失敗：沒有讀到資料。")
+    data = tmp.read_bytes()
+    if len(data) != FLASH_BYTES:
+        tmp.unlink(missing_ok=True)
+        raise FlashError(f"備份不完整：讀到 {len(data)} bytes，應為 {FLASH_BYTES} bytes。請再試一次。")
+    blank = data.count(0xFF) == len(data)
+    info = None if blank else inspect_image(tmp)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    dest = backups_dir() / f"backup-{_mac_slug(mac)}-{stamp}.bin"
+    n = 1
+    while dest.exists():
+        n += 1
+        dest = backups_dir() / f"backup-{_mac_slug(mac)}-{stamp}-{n}.bin"
+    tmp.replace(dest)
+    meta = {
+        "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "mac": mac or "", "chip": chip or "", "port": port, "note": note,
+        "size": len(data), "sha256": hashlib.sha256(data).hexdigest(),
+        "blank": blank, "bootable": bool(info and info.kind == "merged"),
+        "partitions": [p.name for p in info.partitions] if info else [],
+    }
+    dest.with_suffix(".json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), "utf-8")
+    return dest
+
+
+def list_backups() -> list[dict]:
+    """所有備份（最新在前）：每筆含 path 與 .json 內的資料。"""
+    out = []
+    for f in backups_dir().glob("*.bin"):
+        meta = {}
+        try:
+            meta = json.loads(f.with_suffix(".json").read_text("utf-8"))
+        except (OSError, ValueError):
+            meta = {"time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(f.stat().st_mtime)),
+                    "size": f.stat().st_size}
+        meta["path"] = str(f)
+        out.append(meta)
+    out.sort(key=lambda m: m.get("time", ""), reverse=True)
+    return out
+
+
+def delete_backup(path: str | Path) -> None:
+    path = Path(path)
+    if path.parent.resolve() != backups_dir().resolve():
+        raise FlashError("只能刪除備份資料夾裡的檔案。")
+    path.unlink(missing_ok=True)
+    path.with_suffix(".json").unlink(missing_ok=True)
+
+
+def plan_restore(path: str | Path) -> FlashPlan:
+    """還原備份：把 8 MB 整片寫回 0x0（含當時的設定）。"""
+    path = Path(path)
+    info = inspect_image(path)
+    if info.size != FLASH_BYTES:
+        raise FlashError(f"{path.name} 不是完整的 8 MB 備份（{human_size(info.size)}），無法還原。")
+    if info.kind != "merged":
+        raise FlashError(f"{path.name} 裡沒有可開機的韌體（可能是空白裝置的備份），還原後裝置無法開機。")
+    check_chip(info)
+    return FlashPlan("還原備份（整片 8 MB 寫回 0x0）", [FlashItem(0, path)], list(KEEP_FLASH_ARGS), True,
+                     settings_text="↺ 裝置上的玩法與設定（Wi-Fi 等）都會變回備份當時的狀態。")
 
 
 # ================================================================ 序列埠

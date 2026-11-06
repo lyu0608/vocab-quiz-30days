@@ -8,8 +8,11 @@
 | **開源專案** | GitHub 專案 → 下載 → ESP-IDF 編譯 → 上傳。內建 ★ [客語朗讀練習](https://github.com/lyu0608/hakkaataipassport) 與 FoloToy 官方示範，可自行新增 |
 | **韌體檔** | 免編譯：選本機 `.bin`，或從 GitHub Releases 下載 `.bin`，自動判斷寫入位址 |
 | **上傳紀錄** | 每次上傳的時間、內容、版本、裝置 MAC、結果；可一鍵重新上傳 |
+| **備份** | 把裝置整片 8 MB Flash（玩法＋設定）備份到電腦，隨時還原；每次寫入前都會詢問要不要先備份 |
 
-右上角「版本紀錄」可看本工具的版本與 [CHANGELOG](CHANGELOG.md)；開源專案的「版本歷史…」可看提交紀錄並選舊版本編譯。
+- 右上角「📖 使用教學」（F1／⌘?）：內建圖文教學，第一次開啟自動顯示，內容在 [TUTORIAL.md](TUTORIAL.md)
+- 右上角「版本紀錄」：本工具的版本與 [CHANGELOG](CHANGELOG.md)
+- 開源專案的「版本歷史…」：看提交紀錄並選舊版本編譯
 
 ## 安裝與啟動
 
@@ -34,7 +37,7 @@
 
 1. 用**可傳資料**的 USB-C 線接上 AI Passport 並開機，序列埠會自動出現 `/dev/cu.usbmodem…（✅ AI Passport）`
 2. 選一個分頁挑要上傳的內容，按「⬆ 上傳到 AI Passport」
-3. 確認視窗會列出要寫入的位址與檔案、會不會清除設定，按確定開始；完成後裝置自動重新開機
+3. 確認視窗會列出要寫入的位址與檔案、會不會清除設定，並詢問「寫入前先備份裝置目前的韌體」（預設勾選），按「開始寫入」；完成後裝置自動重新開機
 
 ### 開源專案需要 ESP-IDF
 
@@ -49,6 +52,7 @@
 ## 安全設計
 
 - 永遠不執行 erase-flash（不整片清除）
+- 寫入前可先備份整片 Flash，備份失敗就不寫入；還原前比對裝置 MAC
 - 寫入前檢查：韌體是 ESP32-C3 用的、不超出 8 MB、位址對齊、完整映像只能寫到 0x0、只有 app 不能寫到 0x0
 - 社區韌體下載後核對官方提供的 SHA-256，不符就不寫入
 - esptool 以 `--chip esp32c3` 執行，接錯裝置會直接停止
@@ -64,11 +68,13 @@
 | 檔案 | 說明 |
 | --- | --- |
 | `app.py` | 圖形介面（Tkinter） |
+| `TUTORIAL.md` | 軟體內的使用教學 |
+| `CHANGELOG.md` | 版本紀錄 |
 | `flasher_core.py` | 核心：韌體檢查、燒錄計畫、esptool 指令、社區 API、GitHub、ESP-IDF |
 | `tests/test_core.py` | 單元測試：`python3 tests/test_core.py` |
 | `run.command` / `build_app.sh` | 啟動／打包 |
 
-設定與上傳紀錄存在 `~/Library/Application Support/PassportFlasher/`，下載的專案與韌體在 `~/PassportFlasher/`。
+設定與上傳紀錄存在 `~/Library/Application Support/PassportFlasher/`，下載的專案與韌體在 `~/PassportFlasher/`，備份在 `~/PassportFlasher/backups/`（含 Wi-Fi 等設定，請勿隨意分享）。
 
 ## 之後
 

@@ -205,6 +205,13 @@ class App(tk.Tk):
         self.after(300, self.refresh_ports)
         self.after(600, self.search_plays)
         self.after(2500, self._auto_refresh_ports)
+        if not self.cfg.get("tutorial_seen"):  # 第一次開啟自動顯示教學
+            self.cfg["tutorial_seen"] = True
+            try:
+                core.save_config(self.cfg)
+            except OSError:
+                pass
+            self.after(900, self.show_tutorial)
 
     # ------------------------------------------------------------------ 版面
     def _build_device_bar(self) -> None:
@@ -222,8 +229,11 @@ class App(tk.Tk):
         self.baud_var = tk.StringVar(value=str(self.cfg.get("baud", BAUDS[0])))
         ttk.Combobox(f, textvariable=self.baud_var, values=BAUDS, width=8, state="readonly").grid(row=0, column=5, padx=4)
         self.device_var = tk.StringVar(value="尋找裝置中…")
-        ttk.Label(f, textvariable=self.device_var, style="Hint.TLabel").grid(row=1, column=1, columnspan=4, sticky="w", padx=6)
-        ttk.Button(f, text=f"v{core.APP_VERSION} 版本紀錄", command=self.show_about).grid(row=1, column=5, sticky="e", pady=(4, 0))
+        ttk.Label(f, textvariable=self.device_var, style="Hint.TLabel").grid(row=1, column=1, columnspan=3, sticky="w", padx=6)
+        vb = ttk.Frame(f)
+        vb.grid(row=1, column=4, columnspan=2, sticky="e", pady=(4, 0))
+        ttk.Button(vb, text="📖 使用教學", command=self.show_tutorial).pack(side="left", padx=(0, 4))
+        ttk.Button(vb, text=f"v{core.APP_VERSION} 版本紀錄", command=self.show_about).pack(side="left")
         f.columnconfigure(1, weight=1)
 
     def _build_menu(self) -> None:
@@ -237,13 +247,82 @@ class App(tk.Tk):
             except tk.TclError:
                 pass
         h = tk.Menu(m, tearoff=False)
+        h.add_command(label="使用教學", command=self.show_tutorial, accelerator="⌘?" if IS_MAC else "F1")
+        h.add_command(label="官方教學網站", command=lambda: webbrowser.open(core.COMMUNITY_BASE + "/guides/"))
+        h.add_separator()
         h.add_command(label="上傳紀錄", command=lambda: self.nb.select(self.history_tab))
+        h.add_command(label="備份與還原", command=lambda: self.nb.select(self.backup_tab))
         h.add_command(label="燒錄工具版本紀錄", command=self.show_about)
         h.add_separator()
         h.add_command(label="打開下載資料夾", command=lambda: open_in_file_manager(core.workspace_dir()))
         h.add_command(label="AI Passport 玩法社區", command=lambda: webbrowser.open(core.COMMUNITY_BASE + "/plays/"))
         m.add_cascade(label="說明", menu=h)
         self.configure(menu=m)
+        self.bind_all("<F1>", lambda _e: self.show_tutorial())
+        if IS_MAC:
+            self.bind_all("<Command-question>", lambda _e: self.show_tutorial())
+
+    def show_tutorial(self, section: int = 0) -> None:
+        """使用教學視窗：左邊章節、右邊內容。"""
+        w = getattr(self, "_tutorial_win", None)
+        if w is not None and w.winfo_exists():
+            w.lift()
+            w.focus_force()
+            return
+        sections = core.tutorial_sections()
+        w = tk.Toplevel(self)
+        self._tutorial_win = w
+        w.title(f"{core.APP_NAME} — 使用教學")
+        w.geometry("900x640")
+        w.minsize(680, 420)
+        left = ttk.Frame(w, padding=(10, 10, 0, 10))
+        left.pack(side="left", fill="y")
+        ttk.Label(left, text="使用教學", style="Big.TLabel").pack(anchor="w", pady=(0, 6))
+        lb = tk.Listbox(left, width=28, exportselection=False, activestyle="none", relief="flat",
+                        highlightthickness=0)
+        for title, _body in sections:
+            lb.insert("end", title)
+        lb.pack(fill="y", expand=True)
+        right = ttk.Frame(w, padding=10)
+        right.pack(side="left", fill="both", expand=True)
+        nav = ttk.Frame(right)
+        nav.pack(side="bottom", fill="x", pady=(8, 0))
+        txt = ScrolledText(right, wrap="word", relief="flat", padx=14, pady=10)
+        txt.pack(fill="both", expand=True)
+
+        def show(i: int) -> None:
+            i = max(0, min(i, len(sections) - 1))
+            lb.selection_clear(0, "end")
+            lb.selection_set(i)
+            lb.see(i)
+            title, body = sections[i]
+            txt.configure(state="normal")
+            txt.delete("1.0", "end")
+            _render_markdown(txt, f"## {title}\n\n{body}")
+            txt.configure(state="disabled")
+            txt.yview_moveto(0)
+            prev_btn.configure(state="normal" if i > 0 else "disabled")
+            next_btn.configure(state="normal" if i < len(sections) - 1 else "disabled")
+            page_var.set(f"{i + 1} / {len(sections)}")
+
+        def cur() -> int:
+            sel = lb.curselection()
+            return sel[0] if sel else 0
+
+        prev_btn = ttk.Button(nav, text="← 上一章", command=lambda: show(cur() - 1))
+        prev_btn.pack(side="left")
+        next_btn = ttk.Button(nav, text="下一章 →", command=lambda: show(cur() + 1))
+        next_btn.pack(side="left", padx=6)
+        page_var = tk.StringVar()
+        ttk.Label(nav, textvariable=page_var, style="Hint.TLabel").pack(side="left", padx=6)
+        ttk.Button(nav, text="關閉", command=w.destroy).pack(side="right")
+        ttk.Button(nav, text="官方教學網站", command=lambda: webbrowser.open(core.COMMUNITY_BASE + "/guides/")).pack(
+            side="right", padx=6)
+        lb.bind("<<ListboxSelect>>", lambda _e: show(cur()))
+        w.bind("<Left>", lambda _e: show(cur() - 1))
+        w.bind("<Right>", lambda _e: show(cur() + 1))
+        if sections:
+            show(section)
 
     def show_about(self) -> None:
         w = tk.Toplevel(self)
@@ -269,6 +348,7 @@ class App(tk.Tk):
         self._build_project_tab()
         self._build_file_tab()
         self._build_history_tab()
+        self._build_backup_tab()
         try:
             self.nb.select(int(self.cfg.get("tab", 0)))
         except tk.TclError:
@@ -528,6 +608,8 @@ class App(tk.Tk):
         plan = h.get("plan") or {}
         lines = [f"{plan.get('title', '')} · 序列埠 {h.get('port', '')}" + (f" · {h['chip']}" if h.get("chip") else "")]
         lines += [f"0x{i['offset']:06X}  {i['path']}" for i in plan.get("items", [])]
+        if h.get("backup"):
+            lines.append("寫入前備份：" + h["backup"])
         if h.get("error"):
             lines.append("錯誤：" + h["error"])
         self.hist_detail.set("\n".join(lines))
@@ -550,6 +632,132 @@ class App(tk.Tk):
         if self.history and messagebox.askyesno(core.APP_NAME, "清除全部上傳紀錄？（不會刪除下載的韌體檔）"):
             core.clear_history()
             self.reload_history()
+
+    # ---- 分頁 5：備份
+    def _build_backup_tab(self) -> None:
+        t = ttk.Frame(self.nb, padding=6)
+        self.backup_tab = t
+        self.nb.add(t, text="  備份  ")
+        ttk.Label(t, text="備份會把 AI Passport 整片 8 MB Flash（玩法＋設定）存到電腦。寫入新韌體前可以先備份，之後隨時還原。",
+                  style="Hint.TLabel", wraplength=900).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 6))
+        cols = ("time", "mac", "state", "note")
+        self.bk_tree = ttk.Treeview(t, columns=cols, show="headings", selectmode="browse")
+        for col, txt, w in (("time", "備份時間", 150), ("mac", "裝置 MAC", 140), ("state", "內容", 110),
+                            ("note", "說明", 420)):
+            self.bk_tree.heading(col, text=txt)
+            self.bk_tree.column(col, width=w, stretch=(col == "note"), anchor="center" if col == "state" else "w")
+        sb = ttk.Scrollbar(t, orient="vertical", command=self.bk_tree.yview)
+        self.bk_tree.configure(yscrollcommand=sb.set)
+        self.bk_tree.grid(row=1, column=0, sticky="nsew")
+        sb.grid(row=1, column=1, sticky="ns")
+        self.bk_tree.bind("<<TreeviewSelect>>", lambda _e: self.show_backup_item())
+        self.bk_detail = tk.StringVar()
+        ttk.Label(t, textvariable=self.bk_detail, style="Hint.TLabel", wraplength=900, justify="left").grid(
+            row=2, column=0, columnspan=2, sticky="w", pady=4)
+        bf = ttk.Frame(t)
+        bf.grid(row=3, column=0, columnspan=2, sticky="w")
+        b = ttk.Button(bf, text="💾 立即備份", style="Accent.TButton", command=self.backup_now)
+        b.pack(side="left")
+        self.action_buttons.append(b)
+        b = ttk.Button(bf, text="↺ 還原這個備份", command=self.restore_backup)
+        b.pack(side="left", padx=6)
+        self.action_buttons.append(b)
+        ttk.Button(bf, text="在 Finder 顯示" if IS_MAC else "打開資料夾", command=self.reveal_backup).pack(side="left")
+        ttk.Button(bf, text="刪除", command=self.delete_backup).pack(side="left", padx=6)
+        t.rowconfigure(1, weight=1)
+        t.columnconfigure(0, weight=1)
+        self.reload_backups()
+
+    def reload_backups(self) -> None:
+        self.backups = core.list_backups()
+        self.bk_tree.delete(*self.bk_tree.get_children())
+        for i, b in enumerate(self.backups):
+            state = "空白裝置" if b.get("blank") else ("✓ 可還原" if b.get("bootable", True) else "⚠️ 無法開機")
+            self.bk_tree.insert("", "end", iid=str(i), values=(b.get("time", ""), b.get("mac", ""), state,
+                                                                 b.get("note", "")))
+        total = sum(int(b.get("size", 0)) for b in self.backups)
+        self.bk_detail.set(f"共 {len(self.backups)} 個備份，{core.human_size(total)}（{core.backups_dir()}）"
+                           if self.backups else "還沒有備份。接上裝置後按「立即備份」，或在寫入前勾選「先備份」。")
+
+    def current_backup(self) -> dict | None:
+        sel = self.bk_tree.selection()
+        return self.backups[int(sel[0])] if sel else None
+
+    def show_backup_item(self) -> None:
+        b = self.current_backup()
+        if not b:
+            return
+        lines = [b["path"]]
+        if b.get("partitions"):
+            lines.append("分區：" + "、".join(b["partitions"]))
+        if b.get("sha256"):
+            lines.append(f"SHA-256：{b['sha256']}")
+        self.bk_detail.set("\n".join(lines))
+
+    def backup_now(self) -> None:
+        port = self.require_port()
+        if not port:
+            return
+        baud = self.baud()
+
+        def work(job: Job):
+            return self._do_backup(job, port, baud, "手動備份")
+
+        def done(path):
+            self.reload_backups()
+            self.nb.select(self.backup_tab)
+            messagebox.showinfo(core.APP_NAME, f"✅ 備份完成：\n{path}")
+
+        self.run_job("備份裝置韌體", work, done)
+
+    def restore_backup(self) -> None:
+        b = self.current_backup()
+        if not b:
+            messagebox.showinfo(core.APP_NAME, "請先選一個備份。")
+            return
+        try:
+            plan = core.plan_restore(b["path"])
+        except (FlashError, OSError) as e:
+            self.show_error(str(e))
+            return
+        port = self.require_port()
+        if not port:
+            return
+
+        def work(job: Job):  # 先讀裝置 MAC，確認是不是同一台
+            job.progress(None)
+            job.run_cmd(core.esptool_cmd(core.chip_id_args(port)), label="讀取裝置")
+            return job.mac
+
+        def done(mac):
+            want = b.get("mac", "")
+            if want and mac and want.lower() != mac.lower():
+                if not messagebox.askyesno(core.APP_NAME, f"這個備份來自另一台裝置（{want}），\n"
+                                                          f"目前接的是 {mac}。\n\n"
+                                                          "還原會把那台的設定複製過來，確定要繼續嗎？", icon="warning"):
+                    return
+            self.confirm_and_flash(plan, port, f"還原 {b.get('time', '')} 的備份", "備份還原",
+                                   f"SHA {b.get('sha256', '')[:10]}")
+
+        self.run_job("確認裝置", work, done)
+
+    def reveal_backup(self) -> None:
+        b = self.current_backup()
+        if b and IS_MAC:
+            subprocess.Popen(["open", "-R", b["path"]])
+        else:
+            open_in_file_manager(core.backups_dir())
+
+    def delete_backup(self) -> None:
+        b = self.current_backup()
+        if not b:
+            return
+        if messagebox.askyesno(core.APP_NAME, f"刪除 {b.get('time', '')} 的備份？刪除後無法復原。", icon="warning"):
+            try:
+                core.delete_backup(b["path"])
+            except (FlashError, OSError) as e:
+                self.show_error(str(e))
+            self.reload_backups()
 
     # ---- 開源專案的版本歷史
     def show_project_history(self) -> None:
@@ -830,25 +1038,86 @@ class App(tk.Tk):
         self.run_job("檢查裝置", work, done)
 
     # ------------------------------------------------------------------ 燒錄（共用）
+    def ask_flash_options(self, plan: core.FlashPlan, port: str, what: str) -> tuple[bool, bool]:
+        """寫入前的確認視窗，並詢問要不要先備份。回傳 (要寫入, 要備份)。"""
+        w = tk.Toplevel(self)
+        w.title("確認寫入")
+        w.transient(self)
+        w.resizable(False, False)
+        res = {"ok": False}
+        body = ttk.Frame(w, padding=16)
+        body.pack(fill="both", expand=True)
+        ttk.Label(body, text=f"要把「{what}」寫入 AI Passport 嗎？", style="Big.TLabel", wraplength=560).pack(anchor="w")
+        ttk.Label(body, text=f"序列埠：{port}", style="Hint.TLabel").pack(anchor="w", pady=(2, 8))
+        ttk.Label(body, text=plan.summary(), justify="left", wraplength=600).pack(anchor="w")
+        box = ttk.LabelFrame(body, text="備份", padding=10)
+        box.pack(fill="x", pady=12)
+        backup_var = tk.BooleanVar(value=bool(self.cfg.get("backup_before_flash", True)))
+        ttk.Checkbutton(box, text="寫入前先備份裝置目前的韌體（建議）", variable=backup_var).pack(anchor="w")
+        ttk.Label(box, text="把整片 8 MB Flash（玩法＋設定）存到電腦，約需 1–3 分鐘；\n"
+                            "之後可在「備份」分頁一鍵還原成現在的樣子。",
+                  style="Hint.TLabel", justify="left").pack(anchor="w", padx=(22, 0), pady=(2, 0))
+        ttk.Label(body, text="寫入時請不要拔線或讓電腦睡眠；中途停止會讓裝置暫時無法開機（重新寫入即可恢復）。",
+                  style="Hint.TLabel", wraplength=600).pack(anchor="w")
+        bf = ttk.Frame(body)
+        bf.pack(fill="x", pady=(14, 0))
+
+        def ok():
+            res["ok"] = True
+            w.destroy()
+        ttk.Button(bf, text="開始寫入", style="Accent.TButton", command=ok).pack(side="right")
+        ttk.Button(bf, text="取消", command=w.destroy).pack(side="right", padx=6)
+        w.bind("<Return>", lambda _e: ok())
+        w.bind("<Escape>", lambda _e: w.destroy())
+        w.update_idletasks()
+        x = self.winfo_rootx() + (self.winfo_width() - w.winfo_reqwidth()) // 2
+        y = self.winfo_rooty() + 80
+        w.geometry(f"+{max(x, 0)}+{max(y, 0)}")
+        w.grab_set()
+        self.wait_window(w)
+        if res["ok"]:
+            self.cfg["backup_before_flash"] = backup_var.get()
+        return res["ok"], backup_var.get()
+
+    def _do_backup(self, job: Job, port: str, baud: int, note: str) -> Path:
+        """在背景執行：讀出整片 Flash 存成備份。"""
+        tmp = core.new_backup_tmp()
+        job.status("備份中：讀取裝置 Flash（8 MB）…")
+        job.progress(0)
+        try:
+            job.run_cmd(core.esptool_cmd(core.read_flash_args(port, baud, tmp)), label="備份")
+            path = core.finalize_backup(tmp, job.mac, job.found_chip, port, note)
+        finally:
+            Path(tmp).unlink(missing_ok=True)
+        job.log(f"✓ 已備份到 {path}\n")
+        self.q.put(("call", self.reload_backups))
+        return path
+
     def confirm_and_flash(self, plan: core.FlashPlan, port: str, what: str,
                           source: str = "", version: str = "") -> None:
-        msg = (f"要把「{what}」寫入 {port} 嗎？\n\n{plan.summary()}\n\n"
-               "寫入時請不要拔線或讓電腦睡眠；中途停止會讓裝置暫時無法開機（重新寫入即可恢復）。")
-        if not messagebox.askokcancel(core.APP_NAME, msg, icon="warning" if plan.resets_settings else "question"):
+        ok, backup = self.ask_flash_options(plan, port, what)
+        if not ok:
             self.log("已取消寫入。\n")
             return
         baud = self.baud()
+        backup_path: list[str] = []
 
         def record(job: Job, result: str, error: str = "") -> None:
             try:
                 core.add_history({"name": what, "source": source, "version": version, "port": port,
                                   "mac": job.mac or "", "chip": job.found_chip or "", "result": result,
-                                  "error": error, "plan": core.plan_to_dict(plan)})
+                                  "error": error, "backup": backup_path[0] if backup_path else "",
+                                  "plan": core.plan_to_dict(plan)})
             except OSError:
                 pass
             self.q.put(("call", self.reload_history))
 
         def work(job: Job):
+            if backup:
+                try:
+                    backup_path.append(str(self._do_backup(job, port, baud, f"寫入「{what}」前自動備份")))
+                except FlashError as e:
+                    raise FlashError(f"備份失敗，為了安全沒有寫入。\n{e}") from e
             job.status("連接裝置中…")
             job.progress(None)
             try:
@@ -864,8 +1133,9 @@ class App(tk.Tk):
 
         def done(_):
             self.status_var.set(f"✅ 完成：{what}")
+            extra = f"\n\n寫入前的韌體已備份，可在「備份」分頁還原。" if backup_path else ""
             messagebox.showinfo(core.APP_NAME, f"✅ 已寫入「{what}」並校驗成功，裝置會自動重新開機。\n\n"
-                                               "如果畫面沒有變化，拔下 USB 線後重新開機即可。")
+                                               "如果畫面沒有變化，拔下 USB 線後重新開機即可。" + extra)
 
         self.run_job(f"寫入：{what}", work, done)
 
@@ -1409,31 +1679,79 @@ def _esptool_version() -> str:
         return "?"
 
 
+_LIST_RE = re.compile(r"^(\s*)([-*]|\d+\.)\s+(.*)$")
+_INLINE_RE = re.compile(r"\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?://[^)]+)\)")
+
+
 def _render_markdown(txt: tk.Text, md: str) -> None:
-    """很簡單的 Markdown 顯示：標題、粗體、清單。"""
+    """簡單的 Markdown 顯示：標題、粗體、行內程式碼、連結、清單（含子清單、編號）、程式碼區塊。"""
     base = UI_FONT
     txt.tag_configure("h1", font=(base[0], base[1] + 6, "bold"), spacing3=6)
-    txt.tag_configure("h2", font=(base[0], base[1] + 3, "bold"), spacing1=10, spacing3=4)
+    txt.tag_configure("h2", font=(base[0], base[1] + 3, "bold"), spacing1=12, spacing3=4)
     txt.tag_configure("h3", font=(base[0], base[1] + 1, "bold"), spacing1=6)
     txt.tag_configure("b", font=(base[0], base[1], "bold"))
-    txt.tag_configure("li", lmargin1=12, lmargin2=26)
+    txt.tag_configure("code", font=MONO_FONT, background="#e8e8e8")
+    txt.tag_configure("pre", font=MONO_FONT, background="#e8e8e8", lmargin1=20, lmargin2=20, spacing1=2, spacing3=2)
+    txt.tag_configure("li1", lmargin1=10, lmargin2=28, spacing1=2)
+    txt.tag_configure("li2", lmargin1=30, lmargin2=48, spacing1=1)
+    txt.tag_configure("link", foreground="#0a64d6", underline=True)
+    txt.tag_bind("link", "<Enter>", lambda _e: txt.configure(cursor="hand2"))
+    txt.tag_bind("link", "<Leave>", lambda _e: txt.configure(cursor=""))
+
+    # 縮排的接續行併回上一行（清單項目換行）；子清單和程式碼區塊不併
     lines: list[str] = []
-    for line in md.splitlines():  # 縮排的接續行併回上一行（清單項目換行）
-        if lines and line.startswith("  ") and line.strip() and lines[-1].strip():
+    in_code = False
+    for line in md.splitlines():
+        if line.strip().startswith("```"):
+            in_code = not in_code
+            lines.append(line)
+            continue
+        if (not in_code and lines and line.startswith("  ") and line.strip() and lines[-1].strip()
+                and not _LIST_RE.match(line) and not lines[-1].strip().startswith("```")):
             lines[-1] += line.strip()
         else:
             lines.append(line)
+
+    link_no = 0
+
+    def inline(text: str, tags: tuple) -> None:
+        nonlocal link_no
+        pos = 0
+        for m in _INLINE_RE.finditer(text):
+            txt.insert("end", text[pos:m.start()], tags)
+            if m.group(1) is not None:
+                inline(m.group(1), tags + ("b",))
+            elif m.group(2) is not None:
+                txt.insert("end", m.group(2), tags + ("code",))
+            else:
+                link_no += 1
+                tag = f"link{link_no}"
+                url = m.group(4)
+                txt.tag_bind(tag, "<Button-1>", lambda _e, u=url: webbrowser.open(u))
+                txt.insert("end", m.group(3), tags + ("link", tag))
+            pos = m.end()
+        txt.insert("end", text[pos:], tags)
+
+    in_code = False
     for line in lines:
+        if line.strip().startswith("```"):
+            in_code = not in_code
+            continue
+        if in_code:
+            txt.insert("end", "  " + line + "  \n", ("pre",))
+            continue
         m = re.match(r"^(#{1,3})\s+(.*)", line)
         if m:
             txt.insert("end", m.group(2) + "\n", f"h{len(m.group(1))}")
             continue
-        tag = ()
-        if re.match(r"^\s*[-*]\s+", line):
-            line = re.sub(r"^\s*[-*]\s+", "• ", line)
-            tag = ("li",)
-        for i, part in enumerate(re.split(r"\*\*(.+?)\*\*", line)):
-            txt.insert("end", part.replace("`", ""), tag + (("b",) if i % 2 else ()))
+        lm = _LIST_RE.match(line)
+        if lm:
+            level = "li2" if len(lm.group(1)) >= 2 else "li1"
+            bullet = lm.group(2) + " " if lm.group(2)[0].isdigit() else ("• " if level == "li1" else "◦ ")
+            txt.insert("end", bullet, (level,))
+            inline(lm.group(3), (level,))
+        else:
+            inline(line, ())
         txt.insert("end", "\n")
 
 
