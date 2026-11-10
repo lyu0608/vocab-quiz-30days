@@ -6,6 +6,10 @@
 只收錄有文字選項的題目 (基本問答、言談理解)；看圖作答的題目 (辨識句意、選項為圖片的題目) 因 App 無法顯示圖片而略過。
 音檔轉成 48kbps 單聲道 (原檔 192kbps 立體聲)，語音清楚且檔案約縮小為 1/4。
 
+v6.3.0 by Claude：擴充到 104–108、110–115 年。104–108、111 參考試題本、114、115 的聽力檔與參考答案放在官網連結的 Google 雲端硬碟
+  (104/105 壓縮檔內還有 rar，需用 7-Zip 解開)；109 年官網未提供聽力檔；102/103 年為試辦，參考答案表沒有聽力答案，不收錄。
+  111 參考試題本的題目全部沿用 104–107 年原題，會被判定為重複而略過，因此 111c 要放在參數最後。
+
 usage: python tools/build_cap_listening.py <答案 txt 資料夾> <輸出 js> <輸出音檔資料夾> 113=<解壓資料夾> 112=<解壓資料夾> ...
 """
 import sys, os, re, io, json, glob, subprocess
@@ -24,6 +28,7 @@ def listening_answers(path):
 def clean(s):
     s = s.replace("’", "'").replace("‘", "'").replace("“", '"').replace("”", '"')
     s = re.sub(r"\s*\d*\s*請翻頁繼續作答\s*", " ", s)
+    s = s.replace("：", ":")  # v6.3.0 by Claude：105 年選項「12：30」用全形冒號，統一為半形
     return re.sub(r"\s+", " ", s).strip()
 
 def parse_booklet(pdf_path):
@@ -31,21 +36,26 @@ def parse_booklet(pdf_path):
         text = "\n".join((p.extract_text() or "") for p in pdf.pages)
     items, part = {}, None
     # 依「第X部分」與「第N題」切段；示例題不在「第N題」之內
-    tokens = re.split(r"(第[一二三]部分：\S+|第\s*\d+\s*題)", text)
+    # v6.3.0 by Claude：104 年標題為「第三部分: 言談理解」(半形冒號加空白)，冒號改為全形/半形皆可
+    tokens = re.split(r"(第[一二三]部分\s*[：:]\s*\S+|第\s*\d+\s*題)", text)
     for i, tok in enumerate(tokens):
-        pm = re.match(r"第[一二三]部分：(\S+?)\s*[（(]", tok + "(") if tok.startswith("第") and "部分" in tok else None
-        if pm:
-            part = re.sub(r"[（(].*", "", tok.split("：", 1)[1]); continue
+        if tok.startswith("第") and "部分" in tok:
+            part = re.sub(r"[（(].*", "", re.split(r"[：:]\s*", tok, maxsplit=1)[1]); continue
         qm = re.match(r"第\s*(\d+)\s*題$", tok)
         if qm and i + 1 < len(tokens):
             body = clean(tokens[i + 1])
-            om = re.search(r"\(A\)\s*(.*?)\s*\(B\)\s*(.*?)\s*\(C\)\s*(.*?)(?:\s+\d+)?(?:\s*試題結束|\s*聽力試題播音完畢|$)", body)
-            items[int(qm.group(1))] = {"part": part, "options": [clean(o) for o in om.groups()] if om else None}
+            # v6.3.0 by Claude：選項 (C) 之後的頁碼與「聽力試題播音結束/完畢」結尾字樣不屬於選項，一併截掉
+            om = re.search(r"\(A\)\s*(.*?)\s*\(B\)\s*(.*?)\s*\(C\)\s*(.*?)(?:\s+\d+)?(?:\s*試題結束|\s*聽力試題播音(?:完畢|結束).*|$)", body)
+            # v6.3.0 by Claude：選項皆為英文；遇到中文字 (含 PDF 內的相容漢字，如 111 參考試題本結尾的播音完畢字樣) 即截斷
+            items[int(qm.group(1))] = {"part": part, "options": [re.sub(r"\s*[　-鿿豈-﫿].*$", "", clean(o)) for o in om.groups()] if om else None}
     return items
+
+# v6.3.0 by Claude：105 年音檔以國字題號命名 (例「04第一題.mp3」)，加入國字 1–21 的對照
+ZH_NUM = {n: z for n, z in enumerate("一 二 三 四 五 六 七 八 九 十 十一 十二 十三 十四 十五 十六 十七 十八 十九 二十 二十一 二十二".split(), 1)}
 
 def find_audio(folder, n):
     for f in glob.glob(os.path.join(folder, "**", "*.mp3"), recursive=True):
-        if re.search(rf"第\s*{n}\s*題", os.path.basename(f)):
+        if re.search(rf"第\s*(?:{n}|{ZH_NUM[n]})\s*題", os.path.basename(f)):
             return f
     return None
 
@@ -54,7 +64,7 @@ if __name__ == "__main__":
     pairs = [a.split("=", 1) for a in sys.argv[4:]]
     os.makedirs(audio_dir, exist_ok=True)
     ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
-    bank, report = [], []
+    bank, report, seen = [], [], {}  # v6.3.0 by Claude：seen 記錄已收錄的選項組合，用來排除重複題
     for year, folder in pairs:
         pdf = (glob.glob(os.path.join(folder, "**", "*Listening*.pdf"), recursive=True) or glob.glob(os.path.join(folder, "**", "*.pdf"), recursive=True))[0]
         items = parse_booklet(pdf)
@@ -67,6 +77,10 @@ if __name__ == "__main__":
                 skipped.append((n, "看圖題")); continue
             if ans.get(n) not in ("A", "B", "C"):
                 skipped.append((n, f"無官方答案 {ans.get(n)}")); continue
+            # v6.3.0 by Claude：111 年參考試題本大多沿用 104–107 年的原題，選項完全相同者視為重複不再收錄
+            dup = seen.get(tuple(opts))
+            if dup:
+                skipped.append((n, f"與 {dup} 重複")); continue
             src = find_audio(folder, n)
             if not src:
                 skipped.append((n, "找不到音檔")); continue
@@ -74,6 +88,7 @@ if __name__ == "__main__":
             dst = os.path.join(audio_dir, f"{year}-{n:02d}.mp3")
             subprocess.run([ffmpeg, "-y", "-loglevel", "error", "-i", src, "-ac", "1", "-ar", "22050", "-b:a", "48k", dst], check=True)
             bank.append({"id": f"{year}-L{n:02d}", "year": year, "no": n, "part": it["part"], "options": opts, "answer": ans[n], "audio": rel})
+            seen[tuple(opts)] = f"{year}-L{n:02d}"
             kept += 1
         report.append(f"{year}: 收錄 {kept} 題，略過 {skipped}")
     with io.open(out_js, "w", encoding="utf-8", newline="\n") as f:

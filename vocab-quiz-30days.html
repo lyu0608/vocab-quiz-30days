@@ -813,6 +813,17 @@
       <button class="modal-close" onclick="toggleChangelogModal(false)">&times;</button>
     </div>
     <div class="modal-body">
+      <!-- v6.3.0 by Claude：新增版本紀錄 -->
+      <div class="history-item">
+        <div class="history-tag">v6.3.0 by Claude - 聽力官方原題擴充為 11 個年度 194 題</div>
+        <div class="history-desc">
+          <ul>
+            <li><b>聽力題庫擴充：</b>新增 104–108、114、115 年國中教育會考英語聽力官方原題 125 題，聽力共 194 題 (104–108、110–115 年)，每天 6–7 題，依年度由新到舊排列。</li>
+            <li><b>答案檢查：</b>新增 125 題以語音辨識將官方錄音轉成文字逐題比對，122 題確認與官方答案吻合，其餘 3 題錄音辨識不清但未發現矛盾；111 年參考試題本 18 題全部沿用 104–107 年原題，官方答案與原題一致，不重複收錄。</li>
+            <li>109 年官網未提供聽力檔；102、103 年為試辦，官方參考答案沒有聽力答案，因此未收錄。看圖作答的題目仍不收錄。</li>
+          </ul>
+        </div>
+      </div>
       <div class="history-item">
         <div class="history-tag">v6.2.9 by Claude - 聽力改用官方會考原題與官方錄音</div>
         <div class="history-desc">
@@ -1006,6 +1017,7 @@
 
 // v6.2.9 by Claude：移除 2 題自編聽力題 (CAP_LISTENING_BANK)。聽力改用 cap_listening_bank.js：
 // 110–113 年國中教育會考英語聽力官方原題 (官方錄音、題本選項與官方答案)，見 buildListenItems
+// v6.3.0 by Claude：聽力題庫擴充為 104–108、110–115 年官方原題 (109 年官網未提供聽力、102/103 年試辦無官方聽力答案)
 
 // v6.2.8 by Claude：移除編造的「真題出處」。原本對題庫中沒有收錄的單字，用雜湊亂算出
 // 「113年國中教育會考 閱讀單選 第N題」之類的標籤，全部都不是真正的會考出處。
@@ -1889,7 +1901,7 @@ function buildExamItems() {
 // v6.2.8 by Claude：官方真題依年度 (新到舊)、題號順序平均分配到 30 天，每天 3–4 題，分配固定不變
 function initExamPlans() {
   examDayPlans = splitIntoDays(buildExamItems());
-  listenDayPlans = splitIntoDays(buildListenItems()); // v6.2.9 by Claude：聽力官方題目，每天 2–3 題
+  listenDayPlans = splitIntoDays(buildListenItems()); // v6.2.9 by Claude：聽力官方題目；v6.3.0 by Claude：擴充後每天 6–7 題
 }
 
 // v6.2.9 by Claude：聽力改用國中教育會考官方聽力原題 (cap_listening_bank.js)，en 為正確選項文字

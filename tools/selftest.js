@@ -397,7 +397,8 @@ const check = (name, ok, detail = "") => { results.push({ name, ok: !!ok, detail
              mistakesOk: mistakes.length === bank.length && mistakes.every(m => m.isCapListen && m.audio), reviewOk: currentTestQueue.length === bank.length && !!currentListeningItem() };
   });
   check(`T17a 官方聽力 ${t17.total} 題：出處、官方選項順序、官方答案判定、官方錄音可下載`, t17.total >= 60 && t17.bad.length === 0, t17.bad.slice(0, 6).join(" ; "));
-  check("T17b 聽力平均分配到 30 天，錯題本記錄官方聽力題且可錯題特訓", t17.planTotal === t17.total && t17.planMin >= 2 && t17.planMax <= 3 && t17.mistakesOk && t17.reviewOk, JSON.stringify({ planTotal: t17.planTotal, min: t17.planMin, max: t17.planMax, m: t17.mistakesOk, r: t17.reviewOk }));
+  // v6.3.0 by Claude：聽力題數擴充後每天題數改依總題數計算 (194 題 → 每天 6–7 題)，不再寫死 2–3 題
+  check("T17b 聽力平均分配到 30 天，錯題本記錄官方聽力題且可錯題特訓", t17.planTotal === t17.total && t17.planMin >= Math.floor(t17.total / 30) && t17.planMax <= Math.ceil(t17.total / 30) && t17.mistakesOk && t17.reviewOk, JSON.stringify({ planTotal: t17.planTotal, min: t17.planMin, max: t17.planMax, m: t17.mistakesOk, r: t17.reviewOk }));
   // T9 service worker + offline
   await page.reload({ waitUntil: "networkidle0" });
   await page.evaluate(() => navigator.serviceWorker.ready);
