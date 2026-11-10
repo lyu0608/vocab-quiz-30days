@@ -2,6 +2,7 @@
 
 > 給接手開發的工程師 / AI。寫於 2026-11-10，對應版本 **v6.3.0 by Claude**。
 > 舊的 `software_requirements_specification.md` 部分內容已過時 (字數、聽力來源)，以本文件為準。
+> 每次開發必守的規則摘要在 [CLAUDE.md](CLAUDE.md) (其他 AI 工具見 [AGENTS.md](AGENTS.md))。
 
 ---
 
